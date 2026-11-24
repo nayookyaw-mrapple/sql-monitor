@@ -4,10 +4,11 @@ import { ApiService, errorMessage } from '../../core/api.service';
 import { ContextService } from '../../core/context.service';
 import { BlockingSession, Deadlock, LockRow, OpenTransaction, ProcStat, RunningRequest, SqlLive, SqlScope } from '../../core/models';
 import { AutoRefresh } from '../../shared/auto-refresh';
-import { AgoPipe, parseDbDate } from '../../shared/format';
+import { AgoPipe, duration, parseDbDate } from '../../shared/format';
 import { Pager } from '../../shared/pager';
+import { SqlHistory } from './sql-history';
 
-type Tab = 'running' | 'locks' | 'deadlocks' | 'procs';
+type Tab = 'running' | 'locks' | 'deadlocks' | 'procs' | 'history' | 'audit';
 
 type Selected =
   | { kind: 'running'; row: RunningRequest }
@@ -17,19 +18,6 @@ type Selected =
 
 const SCOPE_KEY = 'nay-monitor.sql-scope';
 const TAB_KEY = 'nay-monitor.sql-tab';
-
-/** "850 ms", "12.4 s", "3 min 05 s", "2 h 14 min". */
-export function duration(ms: number | null | undefined): string {
-  if (ms === null || ms === undefined || Number.isNaN(ms)) return '—';
-  if (ms < 1000) return `${Math.round(ms)} ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)} s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m} min ${String(Math.floor(s % 60)).padStart(2, '0')} s`;
-  const h = Math.floor(m / 60);
-  if (h < 48) return `${h} h ${m % 60} min`;
-  return `${Math.floor(h / 24)} d ${h % 24} h`;
-}
 
 function bytes(n: number | null | undefined): string {
   if (!n) return '0';
@@ -41,7 +29,7 @@ function bytes(n: number | null | undefined): string {
 
 @Component({
   selector: 'app-sql-activity',
-  imports: [DecimalPipe, AgoPipe, AutoRefresh, Pager],
+  imports: [DecimalPipe, AgoPipe, AutoRefresh, Pager, SqlHistory],
   template: `
     <div class="page-head">
       <div>
@@ -112,6 +100,8 @@ function bytes(n: number | null | undefined): string {
       </button>
       <button type="button" [class.active]="tab() === 'deadlocks'" (click)="setTab('deadlocks')">Deadlocks ({{ deadlockRows().length }})</button>
       <button type="button" [class.active]="tab() === 'procs'" (click)="setTab('procs')">Procedure stats</button>
+      <button type="button" [class.active]="tab() === 'history'" (click)="setTab('history')">History (sampled)</button>
+      <button type="button" [class.active]="tab() === 'audit'" (click)="setTab('audit')">Audit history</button>
     </div>
 
     @switch (tab()) {
@@ -438,6 +428,14 @@ function bytes(n: number | null | undefined): string {
           </div>
         </section>
       }
+
+      @case ('history') {
+        <app-sql-history kind="sampled" [scope]="scope()" />
+      }
+
+      @case ('audit') {
+        <app-sql-history kind="audit" [scope]="scope()" />
+      }
     }
 
     @if (selected(); as s) {
@@ -546,7 +544,7 @@ export class SqlActivity {
   protected readonly ctx = inject(ContextService);
 
   protected readonly scope = signal<SqlScope>(this.readStored(SCOPE_KEY) === 'server' ? 'server' : 'db');
-  protected readonly tab = signal<Tab>((['running', 'locks', 'deadlocks', 'procs'] as Tab[]).find((t) => t === this.readStored(TAB_KEY)) ?? 'running');
+  protected readonly tab = signal<Tab>((['running', 'locks', 'deadlocks', 'procs', 'history', 'audit'] as Tab[]).find((t) => t === this.readStored(TAB_KEY)) ?? 'running');
   protected readonly background = signal(false);
 
   protected readonly live = signal<SqlLive | null>(null);

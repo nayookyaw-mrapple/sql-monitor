@@ -84,4 +84,23 @@ export const config = {
   largeTableRows: int('LARGE_TABLE_ROWS', 1_000_000),
   /** Read with READ UNCOMMITTED so long monitoring scans never block application writes. */
   readUncommitted: (process.env.READ_UNCOMMITTED ?? 'true') === 'true',
+  /**
+   * Activity history: who ran what, kept in a local SQLite file. Runs all the time for the servers listed in
+   * HISTORY_SERVERS (comma-separated, each must also be in DB_SERVERS); empty = off. Nothing is written to SQL Server.
+   */
+  history: {
+    servers: [...new Set((process.env.HISTORY_SERVERS ?? '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean))],
+    /** SQLite file; a relative path is resolved from the server/ folder. */
+    dbPath: process.env.HISTORY_DB_PATH || 'data/history.db',
+    /** How often "Running now" is sampled. */
+    sampleMs: Math.max(1000, int('HISTORY_SAMPLE_MS', 5000)),
+    /** How often new SQL Server Audit records are copied in. */
+    auditPollMs: Math.max(5000, int('HISTORY_AUDIT_POLL_MS', 30_000)),
+    /** Rows older than this are deleted from the SQLite file. */
+    retentionDays: Math.max(1, int('HISTORY_RETENTION_DAYS', 30)),
+    /** Name of the SQL Server Audit a DBA created for NAY-Monitor (see the Audit history tab for the script). */
+    auditName: process.env.HISTORY_AUDIT_NAME || 'NAY_Monitor_Audit',
+    /** Optional: audit file pattern (e.g. D:\SQLAudit\NAY_Monitor_Audit_*.sqlaudit) when it can't be looked up. */
+    auditFilePattern: process.env.HISTORY_AUDIT_FILE_PATTERN || '',
+  },
 };

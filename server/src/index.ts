@@ -8,6 +8,29 @@ import { discoverTargets } from './discovery.js';
 import { ensureTarget, startMonitor } from './monitor.js';
 import { runInTarget, targetFrom, TargetError } from './target.js';
 import { api } from './routes.js';
+import { startSampler } from './sampler.js';
+import { startAuditReader } from './audit.js';
+import { historyDbPath, pruneHistory } from './history-store.js';
+
+/** Always-on activity history for the servers in HISTORY_SERVERS (sampler + audit reader + retention). */
+function startHistory(): void {
+  if (config.history.servers.length === 0) return;
+  const unknown = config.history.servers.filter((s) => !config.servers.includes(s));
+  if (unknown.length) console.warn(`[history] HISTORY_SERVERS entries not in DB_SERVERS: ${unknown.join(', ')}`);
+  const prune = () => {
+    try {
+      const n = pruneHistory();
+      if (n.sampled || n.audit) console.log(`[history] removed ${n.sampled} sampled and ${n.audit} audit rows older than ${config.history.retentionDays} days`);
+    } catch (err) {
+      console.error('[history] prune failed', err);
+    }
+  };
+  prune();
+  setInterval(prune, 60 * 60_000).unref();
+  console.log(`[history] saving to ${historyDbPath()} (kept ${config.history.retentionDays} days)`);
+  startSampler();
+  startAuditReader();
+}
 
 const app = express();
 app.disable('x-powered-by');
@@ -46,6 +69,7 @@ if (existsSync(clientDist)) {
 Promise.all([startMonitor(), discoverTargets()])
   .then(() => {
     setInterval(() => void discoverTargets(), 30 * 60_000).unref();
+    startHistory();
     app.listen(config.port, () => console.log(`[server] NAY-Monitor API listening on http://localhost:${config.port}`));
   })
   .catch((err) => {

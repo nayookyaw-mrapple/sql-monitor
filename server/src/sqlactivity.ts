@@ -17,7 +17,7 @@ type Row = Record<string, unknown>;
 export type Scope = 'db' | 'server';
 
 /** Waits that mean "idle, waiting for work" rather than "stuck" (XE readers, Service Broker, WAITFOR). */
-const BACKGROUND_WAITS = [
+export const BACKGROUND_WAITS = [
   'XE_LIVE_TARGET_TVF',
   'BROKER_RECEIVE_WAITFOR',
   'WAITFOR',
@@ -29,7 +29,7 @@ const BACKGROUND_WAITS = [
 ];
 
 /** The statement currently executing inside a batch/procedure (from statement offsets). */
-const stmt = (text: string, start: string, end: string) =>
+export const stmt = (text: string, start: string, end: string) =>
   `LEFT(SUBSTRING(${text}, ${start} / 2 + 1, (CASE WHEN ${end} IN (-1, 0) THEN DATALENGTH(${text}) ELSE ${end} END - ${start}) / 2 + 1), 4000)`;
 
 /* ---------------- Agent job names ---------------- */
@@ -37,15 +37,14 @@ const stmt = (text: string, start: string, end: string) =>
 const jobCache = new Map<string, { at: number; map: Map<string, string> }>();
 
 /** "SQLAgent - TSQL JobStep (Job 0x… : Step 1)" → job name lookup, per server (msdb, cached 5 min). */
-async function jobNames(): Promise<Map<string, string>> {
-  const server = currentTarget().server;
+export async function jobNames(server = currentTarget().server): Promise<Map<string, string>> {
   const c = jobCache.get(server);
   if (c && Date.now() - c.at < 5 * 60_000) return c.map;
   const map = new Map<string, string>();
   try {
     const rows = await readQuery<{ hex: string; name: string }>(
       `SELECT CONVERT(varchar(34), CONVERT(binary(16), job_id), 1) AS hex, name FROM msdb.dbo.sysjobs`,
-      { pool: 'msdb' },
+      { pool: 'msdb', server },
     );
     for (const r of rows) map.set(r.hex.toUpperCase(), r.name);
   } catch {
@@ -55,7 +54,7 @@ async function jobNames(): Promise<Map<string, string>> {
   return map;
 }
 
-function withJob(row: Row, jobs: Map<string, string>, field = 'programName'): Row {
+export function withJob(row: Row, jobs: Map<string, string>, field = 'programName'): Row {
   const app = typeof row[field] === 'string' ? (row[field] as string) : '';
   const m = /Job (0x[0-9A-F]{32}) : Step (\d+)/i.exec(app);
   if (m) {

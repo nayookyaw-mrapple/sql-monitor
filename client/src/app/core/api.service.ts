@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { ActivityEvent, Deadlock, LockRow, ProcStat, SqlLive, SqlScope, ErrorSourceStatus, ErrorsPage, ErrorsQuery, LatestChangeRow, RecurringError, MonitorStatus, RowsPage, RowsQuery, Summary, TableDetail, TableSummary } from './models';
+import { ActivityEvent, AuditEvent, HistoryPage, HistoryQuery, HistoryStatus, SampledActivity, Deadlock, LockRow, ProcStat, SqlLive, SqlScope, ErrorSourceStatus, ErrorsPage, ErrorsQuery, LatestChangeRow, RecurringError, MonitorStatus, RowsPage, RowsQuery, Summary, TableDetail, TableSummary } from './models';
 
 function params(obj: object): HttpParams {
   let p = new HttpParams();
@@ -69,6 +69,18 @@ export class ApiService {
 
   sqlProcedures(scope: SqlScope, sort: string): Observable<{ rows: ProcStat[] }> {
     return this.http.get<{ rows: ProcStat[] }>('/api/sql/procedures', { params: params({ scope, sort }) });
+  }
+
+  historyStatus(): Observable<HistoryStatus> {
+    return this.http.get<HistoryStatus>('/api/history/status');
+  }
+
+  historySampled(query: HistoryQuery): Observable<HistoryPage<SampledActivity>> {
+    return this.http.get<HistoryPage<SampledActivity>>('/api/history/sampled', { params: params(query) });
+  }
+
+  historyAudit(query: HistoryQuery): Observable<HistoryPage<AuditEvent>> {
+    return this.http.get<HistoryPage<AuditEvent>>('/api/history/audit', { params: params(query) });
   }
 
   latestChanges(

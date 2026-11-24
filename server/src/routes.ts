@@ -9,6 +9,9 @@ import { currentTarget, defaultTarget, knownTargets, targetState, TargetError } 
 import { isoParam, serializeRow } from './serialize.js';
 import { agentGrantScript, getSource, queryErrors, recurringErrors, sourceStatuses } from './errors.js';
 import { deadlocks, liveActivity, lockSummary, procedureStats, procSortKeys, type Scope } from './sqlactivity.js';
+import { historyTotals, queryAudit, querySampled, type HistoryFilter } from './history-store.js';
+import { samplerStatus } from './sampler.js';
+import { auditSetupScript, auditStatus } from './audit.js';
 
 export const api = Router();
 
@@ -361,6 +364,52 @@ api.get('/sql/procedures', async (req, res) => {
   const sort = str(req.query.sort) ?? 'total';
   if (!procSortKeys.includes(sort)) throw new HttpError(400, 'Invalid sort');
   res.json({ rows: await procedureStats(scopeOf(req), sort, abortOnClose(res)) });
+});
+
+/* ---------------- Activity history (local SQLite: sampled activity + SQL Server Audit records) ---------------- */
+
+const HISTORY_ACTIONS = ['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'SELECT', 'EXECUTE', 'TRUNCATE', 'DDL', 'OTHER'];
+
+function historyFilter(req: Request): HistoryFilter {
+  const from = str(req.query.from);
+  const to = str(req.query.to);
+  if (from && !isLocalDateTime(from)) throw new HttpError(400, 'Invalid "from" date');
+  if (to && !isLocalDateTime(to)) throw new HttpError(400, 'Invalid "to" date');
+  const action = str(req.query.action)?.toUpperCase();
+  if (action && !HISTORY_ACTIONS.includes(action)) throw new HttpError(400, 'Invalid action');
+  const requestedSize = Number.parseInt(String(req.query.pageSize ?? '50'), 10);
+  return {
+    server: currentTarget().server,
+    db: scopeOf(req) === 'server' ? undefined : currentTarget().database,
+    from: from ? isoParam(from) : undefined,
+    to: to ? isoParam(to, true) : undefined,
+    action,
+    search: str(req.query.search),
+    page: Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1),
+    pageSize: PAGE_SIZES.includes(requestedSize) ? requestedSize : 50,
+  };
+}
+
+api.get('/history/status', async (_req, res) => {
+  const { server, database } = currentTarget();
+  res.json({
+    server,
+    retentionDays: config.history.retentionDays,
+    sampler: samplerStatus(server),
+    audit: auditStatus(server),
+    totals: historyTotals(server),
+    auditSetupScript: auditSetupScript(database, await dbLogin()),
+  });
+});
+
+api.get('/history/sampled', (req, res) => {
+  const f = historyFilter(req);
+  res.json({ ...querySampled(f), page: f.page, pageSize: f.pageSize });
+});
+
+api.get('/history/audit', (req, res) => {
+  const f = historyFilter(req);
+  res.json({ ...queryAudit(f), page: f.page, pageSize: f.pageSize });
 });
 
 // Express 5 forwards async errors here.

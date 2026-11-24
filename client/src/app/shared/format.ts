@@ -68,3 +68,16 @@ export const RLS_LABEL: Record<string, string> = {
   season_site: 'Season + Site',
   other: 'Filtered',
 };
+
+/** "850 ms", "12.4 s", "3 min 05 s", "2 h 14 min". */
+export function duration(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || Number.isNaN(ms)) return '—';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1)} s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ${String(Math.floor(s % 60)).padStart(2, '0')} s`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h} h ${m % 60} min`;
+  return `${Math.floor(h / 24)} d ${h % 24} h`;
+}
