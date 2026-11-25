@@ -2,10 +2,11 @@
   "name": "sql-monitor",
   "private": true,
   "scripts": {
-    "install:all": "npm --prefix server install && npm --prefix client install",
-    "dev:server": "npm --prefix server run dev",
+    "install:all": "dotnet restore server/SqlMonitor.sln && npm --prefix client install",
+    "dev:server": "dotnet watch --project server/src/API run",
     "dev:client": "npm --prefix client start",
-    "build": "npm --prefix client run build && npm --prefix server run build",
-    "start": "npm --prefix server start"
+    "build": "npm --prefix client run build && dotnet build server/SqlMonitor.sln -c Release",
+    "start": "dotnet run --project server/src/API -c Release --no-launch-profile",
+    "test": "dotnet test server/SqlMonitor.sln"
   }
 }
