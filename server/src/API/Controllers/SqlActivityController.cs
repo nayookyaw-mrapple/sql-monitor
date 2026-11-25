@@ -30,6 +30,10 @@ namespace API.Controllers
         public async Task<IActionResult> Deadlocks() =>
             Ok(await _activity.DeadlocksAsync(Request.Scope(), Request.Raw("refresh") == "1", HttpContext.RequestAborted));
 
+        /// <summary>Every procedure of the selected database: when it was last used and by whom.</summary>
+        [HttpGetOrHead("procedure-usage")]
+        public async Task<IActionResult> ProcedureUsage() => Ok(await _activity.ProcedureUsageAsync(HttpContext.RequestAborted));
+
         /// <summary>Execution statistics per procedure.</summary>
         [HttpGetOrHead("procedures")]
         public async Task<IActionResult> Procedures()

@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { ActivityEvent, AgentJobDetail, AgentJobs,AuditEvent, HistoryPage, HistoryQuery, HistoryStatus, SampledActivity, Deadlock, LockRow, ProcStat, SqlLive, SqlScope, ErrorSourceStatus, ErrorsPage, ErrorsQuery, LatestChangeRow, RecurringError, MonitorStatus, RowsPage, RowsQuery, Summary, TableDetail, TableSummary } from './models';
+import { ActivityEvent, AgentJobDetail, AgentJobs,AuditEvent, HistoryPage, HistoryQuery, HistoryStatus, SampledActivity, Deadlock, LockRow, ProcStat, ProcUsageResult,SqlLive, SqlScope, ErrorSourceStatus, ErrorsPage, ErrorsQuery, LatestChangeRow, RecurringError, MonitorStatus, RowsPage, RowsQuery, Summary, TableDetail, TableSummary } from './models';
 
 function params(obj: object): HttpParams {
   let p = new HttpParams();
@@ -79,6 +79,11 @@ export class ApiService {
 
   sqlProcedures(scope: SqlScope, sort: string): Observable<{ rows: ProcStat[] }> {
     return this.http.get<{ rows: ProcStat[] }>('/api/sql/procedures', { params: params({ scope, sort }) });
+  }
+
+  /** Every procedure of the selected database: when it was last used and by whom. */
+  sqlProcedureUsage(): Observable<ProcUsageResult> {
+    return this.http.get<ProcUsageResult>('/api/sql/procedure-usage');
   }
 
   historyStatus(): Observable<HistoryStatus> {

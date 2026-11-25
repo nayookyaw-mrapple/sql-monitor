@@ -153,6 +153,12 @@ Category, "running now" and next run also need `SELECT` on `msdb.dbo.syscategori
 it the page still works and shows the grant script. Agent keeps a limited history (by default 100 rows per job),
 so older runs are not available. Code: `server/src/API/Services/AgentJobService.cs`, `client/src/app/pages/jobs`.
 
+## Procedure usage page
+
+Every procedure of the database: when it was last used and by whom (login, app or Agent job, host). Latest used / least recently used / no use recorded. "When" is the later of SQL Server's last-run time and the history; "by whom" comes from the history only, so it needs the server in `HISTORY_SERVERS` and goes back only as far as the history does.
+
+Sources: `sys.procedures`, `sys.dm_exec_procedure_stats` and the sampled activity history. Its own menu entry (`/procedures`); code: `SqlActivityService.ProcedureUsageAsync`, `client/src/app/pages/procedures`.
+
 ## SQL activity & locks page
 
 Live view of what SQL Server is doing, read from its own system views (needs `VIEW SERVER STATE`, which the

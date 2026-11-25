@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
+using API.Configuration;
 using API.Infrastructure;
 
 namespace API.Services
@@ -50,14 +51,18 @@ namespace API.Services
 
         private readonly Db _db;
         private readonly TargetRegistry _targets;
+        private readonly MonitorConfig _config;
+        private readonly HistoryStore _history;
         private readonly ConcurrentDictionary<string, (long At, Dictionary<string, string> Map)> _jobCache = new();
         private readonly ConcurrentDictionary<string, DeadlockCache> _deadlockCache = new();
 
         /// <summary>Creates the service.</summary>
-        public SqlActivityService(Db db, TargetRegistry targets)
+        public SqlActivityService(Db db, TargetRegistry targets, MonitorConfig config, HistoryStore history)
         {
             _db = db;
             _targets = targets;
+            _config = config;
+            _history = history;
         }
 
         /// <summary>The statement currently executing inside a batch/procedure (from statement offsets).</summary>
@@ -361,6 +366,71 @@ namespace API.Services
                 Numbers(row, "executions", "totalMs", "avgMs", "maxMs", "lastMs", "avgCpuMs", "avgReads", "avgWrites");
                 return row;
             }).ToList();
+        }
+
+        /* ---------------- Procedure usage: last used, and by whom ---------------- */
+
+        /// <summary>
+        /// Every stored procedure of the selected database with when it was last used and by whom.
+        /// "When" is the later of SQL Server's own last execution time (sys.dm_exec_procedure_stats, kept only
+        /// while the plan stays cached) and the last time the activity history saw it. "By whom" comes from the
+        /// activity history alone: SQL Server does not record who ran a procedure.
+        /// </summary>
+        public async Task<object> ProcedureUsageAsync(CancellationToken signal)
+        {
+            var target = _targets.Current;
+            var rows = await _db.ReadQueryAsync(
+                @"SELECT s.name + '.' + p.name AS procName, p.modify_date AS modifiedAt,
+                         ps.lastRun, ps.executions, ps.cachedAt
+                  FROM sys.procedures p
+                  JOIN sys.schemas s ON s.schema_id = p.schema_id
+                  LEFT JOIN (SELECT object_id, MAX(last_execution_time) AS lastRun, SUM(execution_count) AS executions, MIN(cached_time) AS cachedAt
+                             FROM sys.dm_exec_procedure_stats WHERE database_id = DB_ID() GROUP BY object_id) ps ON ps.object_id = p.object_id
+                  WHERE p.is_ms_shipped = 0
+                  ORDER BY s.name, p.name",
+                new QueryOptions { Signal = signal });
+
+            string? serverStart = null;
+            try
+            {
+                var info = await _db.ReadQueryAsync("SELECT sqlserver_start_time AS startedAt FROM sys.dm_os_sys_info", new QueryOptions { Signal = signal });
+                serverStart = Js.Text(Serialize.Value(info.FirstOrDefault()?["startedAt"]));
+            }
+            catch (Exception err) when (err is not CancelledError)
+            {
+                /* not allowed to read it: the page just leaves the restart time out */
+            }
+
+            var historyOn = _config.History.Servers.Contains(target.Server.ToUpperInvariant());
+            var seen = _history.ProcedureLastUse(target.Server.ToUpperInvariant(), target.Database);
+
+            var procs = rows.Select(r =>
+            {
+                var name = (string)r["procName"]!;
+                seen.TryGetValue(name.ToLowerInvariant(), out var h);
+                var lastRun = Js.Text(Serialize.Value(r["lastRun"]));
+                var lastSeen = h?["lastSeen"] as string;
+                // Both are "yyyy-MM-dd HH:mm:ss.fff" in the SQL Server's local time, so text order is time order.
+                var lastUsed = string.CompareOrdinal(lastRun ?? "", lastSeen ?? "") >= 0 ? lastRun : lastSeen;
+                return (object)new
+                {
+                    procName = name,
+                    modifiedAt = Serialize.Value(r["modifiedAt"]),
+                    lastUsed,
+                    lastRun,
+                    executions = Js.ToNullableLong(r["executions"]),
+                    cachedAt = Serialize.Value(r["cachedAt"]),
+                    lastSeen,
+                    lastLogin = h?["login"],
+                    lastHost = h?["host"],
+                    lastApp = h?["app"],
+                    lastJob = h?["job"],
+                    seen = h is null ? 0 : Js.ToLong(h["seen"]),
+                    logins = h is null ? 0 : Js.ToLong(h["logins"]),
+                };
+            }).ToList();
+
+            return new { database = target.Database, server = target.Server, historyOn, serverStart, rows = procs };
         }
     }
 }

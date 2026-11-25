@@ -25,6 +25,7 @@ import { MODULE_NAMES, ModuleSummary } from './core/models';
             }
           </a>
           <a routerLink="/jobs" routerLinkActive="active"><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg><span class="menu-text">SQL Agent jobs</span></a>
+          <a routerLink="/procedures" routerLinkActive="active"><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 8-4 4 4 4" /><path d="m16 8 4 4-4 4" /><path d="m13.5 5-3 14" /></svg><span class="menu-text">Procedure usage</span></a>
           <a routerLink="/sql" routerLinkActive="active"><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="8" ry="3" /><path d="M4 5.5v6.5c0 1.66 3.58 3 8 3s8-1.34 8-3V5.5" /><path d="M4 12v6.5c0 1.66 3.58 3 8 3s8-1.34 8-3V12" /></svg><span class="menu-text">SQL activity &amp; locks</span></a>
           <a routerLink="/latest-changes" routerLinkActive="active"><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7.5V12l3 2" /></svg><span class="menu-text">Latest changes</span></a>
           <a routerLink="/activity" routerLinkActive="active"><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" /></svg><span class="menu-text">Live activity</span></a>

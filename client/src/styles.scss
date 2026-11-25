@@ -1722,3 +1722,19 @@ a.btn {
     }
   }
 }
+
+/* ---------- Procedure usage ---------- */
+
+.usage-grid {
+  tbody tr.plain {
+    cursor: default;
+  }
+  .proc-cell {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    min-width: 240px;
+  }
+  .who-login {
+    font-size: 13.5px;
+  }
+}

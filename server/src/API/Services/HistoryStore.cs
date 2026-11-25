@@ -411,6 +411,8 @@ namespace API.Services
                 // Added later: the application each row came from.
                 AddAppColumn(d, "sampled_activity");
                 AddAppColumn(d, "audit_event");
+                // Procedure usage: the last use of each procedure without reading the whole log.
+                Exec(d, "CREATE INDEX IF NOT EXISTS ix_sampled_proc ON sampled_activity (server, proc_name, last_seen) WHERE proc_name IS NOT NULL");
             }
             catch
             {
@@ -659,6 +661,29 @@ namespace API.Services
                         args.ToArray())
                     .Select(r => (object)new { app = Js.Str(r["app"]), rows = Js.ToLong(r["rows"]) })
                     .ToList();
+            }
+        }
+
+        /// <summary>
+        /// For every procedure seen in the sampled log of a database: who ran it last and when, how many times
+        /// it was seen and by how many different logins. Keyed by "schema.name" in lower case.
+        /// </summary>
+        public Dictionary<string, Row> ProcedureLastUse(string server, string dbName)
+        {
+            lock (_sync)
+            {
+                // With MAX() in the list, SQLite takes the other plain columns from the row holding that maximum.
+                var rows = All(
+                    Open(),
+                    @"SELECT proc_name AS procName, login_name AS login, host_name AS host, app, job_name AS job,
+                             MAX(last_seen) AS lastSeen, COUNT(*) AS seen, COUNT(DISTINCT login_name COLLATE NOCASE) AS logins
+                      FROM sampled_activity
+                      WHERE server = ? AND db = ? COLLATE NOCASE AND proc_name IS NOT NULL AND login_name IS NOT NULL
+                      GROUP BY proc_name COLLATE NOCASE",
+                    server, dbName);
+                var result = new Dictionary<string, Row>(rows.Count);
+                foreach (var r in rows) result[((string)r["procName"]!).ToLowerInvariant()] = r;
+                return result;
             }
         }
 

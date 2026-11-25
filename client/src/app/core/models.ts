@@ -376,6 +376,37 @@ export interface ProcStat {
   avgWrites: number;
 }
 
+/** A stored procedure with when it was last used and by whom. */
+export interface ProcUsage {
+  procName: string;
+  modifiedAt: string | null;
+  /** The later of lastRun and lastSeen; null when neither is known. */
+  lastUsed: string | null;
+  /** SQL Server's own last execution time (while the plan stays cached). */
+  lastRun: string | null;
+  executions: number | null;
+  cachedAt: string | null;
+  /** Last time the activity history saw it running. */
+  lastSeen: string | null;
+  lastLogin: string | null;
+  lastHost: string | null;
+  lastApp: string | null;
+  lastJob: string | null;
+  /** Times seen in the activity history, and by how many different logins. */
+  seen: number;
+  logins: number;
+}
+
+export interface ProcUsageResult {
+  database: string;
+  server: string;
+  /** The activity history is recording this server. */
+  historyOn: boolean;
+  /** When SQL Server last started (its own last-run times start again from here). */
+  serverStart: string | null;
+  rows: ProcUsage[];
+}
+
 /* ---------------- Activity history (saved locally by the server) ---------------- */
 
 /** One statement the sampler saw executing. Sampled every few seconds, so fast statements are missing. */
