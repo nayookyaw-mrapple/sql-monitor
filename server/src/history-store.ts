@@ -71,6 +71,9 @@ let handle: DatabaseSync | null = null;
 /** A Kubernetes pod name: <service>-<replica set hash>-<pod id>, e.g. transfer-api-58b56785cc-hn82t. */
 const POD_HOST = /^([a-z0-9][a-z0-9.-]*?)-[a-z0-9]{6,10}-[a-z0-9]{5}$/;
 
+/** An application name that is really a list of settings, e.g. "siteId=3&season=2026" or "SiteID=6". */
+const SETTINGS_NAME = /^\w+=[^&]*(&\w+=[^&]*)*$/;
+
 /**
  * The application a connection came from, for the App column and filter:
  *  - a service running in Kubernetes: the service name, taken from the pod name it connected from (the pod
@@ -78,6 +81,7 @@ const POD_HOST = /^([a-z0-9][a-z0-9.-]*?)-[a-z0-9]{6,10}-[a-z0-9]{5}$/;
  *  - a SQL Agent job step: "SQL Agent";
  *  - a client that sends its settings as the application name ("SiteID=2&App=CARLA"): the App value, so
  *    the same program at different sites counts as one application;
+ *  - settings with no App value ("siteId=3&season=2026"): nothing, because that does not say which program it is;
  *  - anything else: the application name the client gave SQL Server.
  */
 export function appName(p: { programName: string | null; hostName: string | null; loginName: string | null }): string | null {
@@ -86,7 +90,8 @@ export function appName(p: { programName: string | null; hostName: string | null
   const pod = POD_HOST.exec(p.hostName?.trim() ?? '');
   if (pod) return pod[1];
   const named = /(?:^|&)App=([^&]+)/i.exec(program);
-  if (named) return named[1].trim() || program;
+  if (named) return named[1].trim() || null;
+  if (SETTINGS_NAME.test(program)) return null;
   return program || null;
 }
 
@@ -97,6 +102,10 @@ export function appName(p: { programName: string | null; hostName: string | null
 function addAppColumn(d: DatabaseSync, table: string): void {
   const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
   if (!cols.some((c) => c.name === 'app')) d.exec(`ALTER TABLE ${table} ADD COLUMN app TEXT`);
+  // Rows saved while a bare settings string ("SiteID=6") still counted as an app name: clear those.
+  const settings = (d.prepare(`SELECT DISTINCT app FROM ${table} WHERE app LIKE '%=%'`).all() as { app: string }[]).filter((r) => SETTINGS_NAME.test(r.app));
+  const clear = d.prepare(`UPDATE ${table} SET app = NULL WHERE app = ?`);
+  for (const r of settings) clear.run(r.app);
   const combos = d
     .prepare(`SELECT DISTINCT program_name AS programName, host_name AS hostName, login_name AS loginName FROM ${table} WHERE app IS NULL`)
     .all() as { programName: string | null; hostName: string | null; loginName: string | null }[];

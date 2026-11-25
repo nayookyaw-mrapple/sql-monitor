@@ -288,7 +288,8 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
               Which application the row came from. For a service running in Kubernetes it is the service name, taken from the pod it
               connected from: <span class="mono">transfer-api-58b56785cc-hn82t</span> becomes <span class="mono">transfer-api</span>, so the
               name stays the same across deploys. Agent job steps show <strong>SQL Agent</strong>. Anything else shows the application
-              name the program gave SQL Server, which is only as good as what that program sends.
+              name the program gave SQL Server, which is only as good as what that program sends. A dash means the program did not say
+              what it is: it only sent settings such as <span class="mono">siteId=3&amp;season=2026</span>, which stay visible under Who.
             </dd>
             <dt>Procedure / statement</dt>
             <dd>
@@ -358,7 +359,8 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
             <dt>App</dt>
             <dd>
               Which application the record came from: the service name (taken from the pod it connected from), <strong>SQL Agent</strong>, or
-              the application name the program gave. Empty when the SQL Server version does not record the computer and application.
+              the application name the program gave. A dash when the program only sent settings such as
+              <span class="mono">SiteID=6</span>, or when the SQL Server version does not record the computer and application.
             </dd>
             <dt>Table / procedure</dt>
             <dd>The object the action was on. This comes from SQL Server itself, so it is exact.</dd>
