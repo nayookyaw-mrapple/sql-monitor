@@ -33,6 +33,11 @@ const VIEW_KEY = 'nay-monitor.procedures.view';
     }
 
     <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Stored procedures</div>
+        <div class="stat-value">{{ data() ? (counts().total | number) : '—' }}</div>
+        <div class="stat-foot">in {{ data()?.database ?? ctx.target()?.database }} · {{ counts().used | number }} with a recorded use</div>
+      </div>
       <button type="button" class="stat stat-btn" [class.active]="view() === 'latest'" (click)="setView('latest')">
         <div class="stat-label">Latest used</div>
         <div class="stat-value">{{ data() ? counts().used : '—' }}</div>
@@ -45,13 +50,13 @@ const VIEW_KEY = 'nay-monitor.procedures.view';
       </button>
       <button type="button" class="stat stat-btn" [class.active]="view() === 'never'" (click)="setView('never')">
         <div class="stat-label">No use recorded</div>
-        <div class="stat-value">{{ data() ? counts().never : '—' }}</div>
+        <div class="stat-value">{{ data() ? (counts().never | number) : '—' }}</div>
         <div class="stat-foot">not seen since recording began</div>
       </button>
       <div class="stat">
         <div class="stat-label">Used by someone known</div>
         <div class="stat-value">{{ data() ? counts().withWho : '—' }}</div>
-        <div class="stat-foot">of {{ counts().total | number }} procedures</div>
+        <div class="stat-foot">of the {{ counts().used | number }} with a recorded use</div>
       </div>
     </div>
 
