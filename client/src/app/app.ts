@@ -24,6 +24,7 @@ import { MODULE_NAMES, ModuleSummary } from './core/models';
               <span class="menu-badge" title="Errors in the last 24 hours">{{ errors24h() }}</span>
             }
           </a>
+          <a routerLink="/jobs" routerLinkActive="active">⚙ SQL Agent jobs</a>
           <a routerLink="/sql" routerLinkActive="active">⛁ SQL activity &amp; locks</a>
           <a routerLink="/latest-changes" routerLinkActive="active">⟲ Latest changes</a>
           <a routerLink="/activity" routerLinkActive="active">⚡ Live activity</a>

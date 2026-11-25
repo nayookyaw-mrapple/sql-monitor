@@ -55,7 +55,7 @@ namespace API
             {
                 options.AddPolicy(CorsPolicy, builder =>
                 {
-                    var corsOrigin = Configuration["CORS_ORIGIN"] ?? "http://localhost:4200";
+                    var corsOrigin = Configuration["CORS_ORIGIN"] ?? "http://localhost:4300";
                     builder
                         .WithOrigins(corsOrigin.Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToArray())
                         .WithMethods("GET")
@@ -86,6 +86,7 @@ namespace API
             services.AddSingleton<TableSummaries>();
             services.AddSingleton<ErrorService>();
             services.AddSingleton<SqlActivityService>();
+            services.AddSingleton<AgentJobService>();
             services.AddSingleton<HistoryStore>();
             services.AddSingleton<Sampler>();
             services.AddSingleton<AuditReader>();

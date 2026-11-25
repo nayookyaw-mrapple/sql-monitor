@@ -9,6 +9,7 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/latest-changes/latest-changes').then((m) => m.LatestChanges),
   },
   { path: 'errors', title: 'Errors · SQL Monitor', loadComponent: () => import('./pages/errors/errors').then((m) => m.Errors) },
+  { path: 'jobs', title: 'SQL Agent jobs · SQL Monitor', loadComponent: () => import('./pages/jobs/jobs').then((m) => m.Jobs) },
   { path: 'sql', title: 'SQL activity · SQL Monitor', loadComponent: () => import('./pages/sql-activity/sql-activity').then((m) => m.SqlActivity) },
   { path: 'activity', title: 'Live activity · SQL Monitor', loadComponent: () => import('./pages/activity/activity').then((m) => m.Activity) },
   { path: 'tables', title: 'History tables · SQL Monitor', loadComponent: () => import('./pages/tables/tables').then((m) => m.Tables) },

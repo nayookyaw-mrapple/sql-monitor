@@ -1529,3 +1529,138 @@ a.btn {
   gap: 8px;
   align-items: center;
 }
+
+/* ---------- SQL Agent jobs ---------- */
+
+.sev-ok {
+  background: color-mix(in srgb, var(--pos) 14%, transparent);
+  color: var(--pos);
+}
+.sev-off {
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.stat-btn.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.jobs-grid {
+  /* Job names and paths are long words with no spaces: let them wrap inside their own column. */
+  .job {
+    width: 26%;
+    min-width: 220px;
+    max-width: 360px;
+  }
+  .job .proc,
+  .what-item {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .job-sub {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+  .what {
+    width: 26%;
+    min-width: 220px;
+    max-width: 380px;
+  }
+  .what-item {
+    font-family: Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.35;
+    margin-bottom: 2px;
+  }
+  .msg {
+    min-width: 260px;
+    max-width: 520px;
+  }
+  .neg {
+    color: var(--neg);
+    font-weight: 600;
+  }
+}
+
+.run-step {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 13px;
+  .sev {
+    margin-right: 6px;
+  }
+  strong {
+    margin-right: 6px;
+  }
+}
+
+.run-msg {
+  margin-top: 4px;
+  font-family: Consolas, monospace;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.drawer.wide {
+  width: min(680px, 100vw);
+  h3 {
+    margin: 18px 0 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 14px;
+  }
+}
+
+.job-step {
+  margin-bottom: 14px;
+  dd {
+    margin-top: 4px;
+  }
+  .btn {
+    margin-top: 6px;
+  }
+}
+
+/* "What it runs" at the top of the job panel. */
+.runs-box {
+  margin: 4px 0 10px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--pos) 12%, var(--surface));
+  border: 1px solid var(--pos);
+  border-left-width: 5px;
+  border-radius: var(--radius);
+}
+.runs-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--pos);
+}
+.runs-kind {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--pos);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.runs-label {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.runs-item {
+  font-family: Consolas, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}

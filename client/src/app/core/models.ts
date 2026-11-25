@@ -473,3 +473,90 @@ export interface HistoryStatus {
   totals: { sampledRows: number; sampledOldest: string | null; auditRows: number; auditOldest: string | null };
   auditSetupScript: string;
 }
+/** Outcome of the last run of a SQL Agent job. */
+export type JobStatus = 'running' | 'failed' | 'succeeded' | 'retry' | 'cancelled' | 'never';
+
+/** A SQL Server Agent job with its last outcome. */
+export interface AgentJob {
+  jobId: string;
+  name: string;
+  enabled: boolean;
+  description: string | null;
+  category: string | null;
+  owner: string | null;
+  steps: number;
+  /** What kind of steps it has: "T-SQL", "SSIS package", "Command line", … */
+  kinds: string[];
+  /** Stored procedures its steps call. */
+  procs: string[];
+  /** Files, folders, SSIS packages and log files its steps name. */
+  files: string[];
+  /** Start of the first step's command, on one line. */
+  preview: string | null;
+  /** The commands of all steps, for searching. */
+  commandText: string | null;
+  status: JobStatus;
+  lastRunAt: string | null;
+  lastSeconds: number | null;
+  /** The job outcome message of the last run. */
+  lastMessage: string | null;
+  /** "2 · Load files": the step that failed in the last run. */
+  failedStep: string | null;
+  /** What that step reported. */
+  failedMessage: string | null;
+  lastFailedAt: string | null;
+  runs7d: number;
+  failed7d: number;
+  runningSince: string | null;
+  nextRunAt: string | null;
+  modifiedAt: string | null;
+}
+
+export interface AgentJobs {
+  server: string;
+  /** False when the login cannot read msdb job tables. */
+  available: boolean;
+  reason: string | null;
+  /** Category, running now and next run could be read. */
+  extras: boolean;
+  jobs: AgentJob[];
+}
+
+export interface AgentJobStep {
+  stepId: number;
+  name: string;
+  subsystem: string | null;
+  /** The subsystem in plain words. */
+  kind: string;
+  db: string | null;
+  command: string | null;
+  /** File the step writes its output to. */
+  outputFile: string | null;
+  procs: string[];
+  files: string[];
+}
+
+export interface AgentJobRunStep {
+  stepId: number;
+  stepName: string | null;
+  status: JobStatus;
+  at: string | null;
+  seconds: number;
+  message: string | null;
+  sqlMessageId: number;
+  sqlSeverity: number;
+  retries: number;
+}
+
+export interface AgentJobRun {
+  status: JobStatus;
+  at: string | null;
+  seconds: number | null;
+  message: string | null;
+  steps: AgentJobRunStep[];
+}
+
+export interface AgentJobDetail {
+  steps: AgentJobStep[];
+  runs: AgentJobRun[];
+}

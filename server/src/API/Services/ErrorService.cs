@@ -473,6 +473,9 @@ namespace API.Services
             $"GRANT SELECT ON dbo.sysjobs TO [{user}];",
             $"GRANT SELECT ON dbo.sysjobhistory TO [{user}];",
             $"GRANT SELECT ON dbo.sysjobsteps TO [{user}];",
+            "-- SQL Agent jobs page: category, running now and next run.",
+            $"GRANT SELECT ON dbo.syscategories TO [{user}];",
+            $"GRANT SELECT ON dbo.sysjobactivity TO [{user}];",
         });
     }
 }

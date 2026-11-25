@@ -27,7 +27,7 @@ namespace API.Configuration
             static List<string> Distinct(IEnumerable<string> items) => items.Distinct().ToList();
 
             Port = Int("PORT", 3000);
-            CorsOrigin = Get("CORS_ORIGIN") ?? "http://localhost:4200";
+            CorsOrigin = Get("CORS_ORIGIN") ?? "http://localhost:4300";
 
             var windows = (Get("DB_AUTH") ?? "sql").ToLowerInvariant() == "windows";
             Db = new DbSettings

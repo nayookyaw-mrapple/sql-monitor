@@ -63,7 +63,8 @@ namespace API.Services
         /// <summary>Extra fields shown in the detail panel: label and SQL expression, in display order.</summary>
         public required (string Label, string Expr)[] Extra { get; init; }
 
-        private const string AgentTime =
+        /// <summary>Start time of a msdb.dbo.sysjobhistory row aliased h (run_date + run_time as a datetime).</summary>
+        internal const string AgentTime =
             "CONVERT(datetime, CONVERT(char(8), h.run_date)) + CAST(STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 5, 0, ':'), 3, 0, ':') AS datetime)";
 
         /// <summary>Every error source, in display order. To add one, append an entry.</summary>

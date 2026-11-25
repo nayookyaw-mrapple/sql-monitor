@@ -10,7 +10,7 @@ Read-only monitor for the `*HistoryT` audit tables in **MrApple_DEV** (MRA-SQL-U
 ```bash
 npm run install:all
 npm run dev:server     # API on http://localhost:3000 (dotnet watch)
-npm run dev:client     # UI  on http://localhost:4200 (proxies /api to :3000)
+npm run dev:client     # UI  on http://localhost:4300 (proxies /api to :3000)
 ```
 
 The npm scripts only wrap `dotnet`: `dotnet run --project server/src/API` does the same as `dev:server` without
@@ -140,6 +140,18 @@ Sources live in `server/src/API/Services/ErrorSources.cs`. To add one, append an
 **SQL Agent access:** the `maui` login cannot read `msdb` job history. Either a DBA grants it
 (the page shows the exact script) or set `MSDB_USER` / `MSDB_PASSWORD` in `server/.env` to a login that can.
 Access is re-checked every 5 minutes, so no restart is needed after the grant.
+
+## SQL Agent jobs page
+
+Every SQL Server Agent job on the selected database's server (`/jobs`), searchable, with tiles for failed /
+running / succeeded / disabled. Each row shows the last outcome, when it ran and how long it took, the next run,
+runs and failures in the last 7 days, and the error of the step that failed. Clicking a job opens its recent runs
+(every step with its message, SQL error number and retries) and the command of each step.
+
+Read from `msdb.dbo.sysjobs`, `sysjobhistory` and `sysjobsteps` (the same access as the Agent source above).
+Category, "running now" and next run also need `SELECT` on `msdb.dbo.syscategories` and `sysjobactivity`; without
+it the page still works and shows the grant script. Agent keeps a limited history (by default 100 rows per job),
+so older runs are not available. Code: `server/src/API/Services/AgentJobService.cs`, `client/src/app/pages/jobs`.
 
 ## SQL activity & locks page
 

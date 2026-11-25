@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { ActivityEvent, AuditEvent, HistoryPage, HistoryQuery, HistoryStatus, SampledActivity, Deadlock, LockRow, ProcStat, SqlLive, SqlScope, ErrorSourceStatus, ErrorsPage, ErrorsQuery, LatestChangeRow, RecurringError, MonitorStatus, RowsPage, RowsQuery, Summary, TableDetail, TableSummary } from './models';
+import { ActivityEvent, AgentJobDetail, AgentJobs,AuditEvent, HistoryPage, HistoryQuery, HistoryStatus, SampledActivity, Deadlock, LockRow, ProcStat, SqlLive, SqlScope, ErrorSourceStatus, ErrorsPage, ErrorsQuery, LatestChangeRow, RecurringError, MonitorStatus, RowsPage, RowsQuery, Summary, TableDetail, TableSummary } from './models';
 
 function params(obj: object): HttpParams {
   let p = new HttpParams();
@@ -51,6 +51,16 @@ export class ApiService {
 
   recurringErrors(range: { from?: string; to?: string }, source?: string): Observable<{ rows: RecurringError[] }> {
     return this.http.get<{ rows: RecurringError[] }>('/api/errors/recurring', { params: params({ ...range, source }) });
+  }
+
+  /** Every SQL Agent job on the selected database's server. */
+  jobs(refresh = false): Observable<{ result: AgentJobs; grantScript: string }> {
+    return this.http.get<{ result: AgentJobs; grantScript: string }>('/api/jobs', { params: params({ refresh: refresh ? 1 : undefined }) });
+  }
+
+  /** Steps and recent runs of one SQL Agent job. */
+  job(jobId: string): Observable<AgentJobDetail> {
+    return this.http.get<AgentJobDetail>(`/api/jobs/${encodeURIComponent(jobId)}`);
   }
 
   sqlLive(scope: SqlScope, background = false): Observable<SqlLive> {
