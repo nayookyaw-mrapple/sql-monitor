@@ -2,32 +2,61 @@
 
 Read-only monitor for the `*HistoryT` audit tables in **MrApple_DEV** (MRA-SQL-UAT-01).
 
-- `server/` – Node.js + TypeScript + Express + `mssql` API (GET only)
+- `server/` – ASP.NET Core 9 API (.NET, `Microsoft.Data.SqlClient`, GET only). Needs the .NET 9 SDK.
 - `client/` – Angular 22 app (Dashboard, Latest changes, Live activity, All tables, per-module menus, table viewer)
 
 ## Run (development)
 
 ```bash
 npm run install:all
-npm run dev:server     # API on http://localhost:3000
+npm run dev:server     # API on http://localhost:3000 (dotnet watch)
 npm run dev:client     # UI  on http://localhost:4200 (proxies /api to :3000)
 ```
 
-Connection settings live in `server/.env` (copy from `server/.env.example`). `.env` is git-ignored.
+The npm scripts only wrap `dotnet`: `dotnet run --project server/src/API` does the same as `dev:server` without
+the file watcher, and `server/SqlMonitor.sln` opens in Visual Studio / Rider.
+
+Connection settings live in `server/.env` (copy from `server/.env.example`). `.env` is git-ignored. Real
+environment variables with the same names win over the file.
 
 ### Windows Authentication
 
 Set `DB_AUTH=windows` in `server/.env` (no user/password needed). The server then connects as the Windows
-account **running the Node process** (`Trusted_Connection`) through the `msnodesqlv8` ODBC driver, using
-`DB_ODBC_DRIVER` (default `ODBC Driver 18 for SQL Server`, already installed on this PC). Set `DB_AUTH=sql` to go
-back to `DB_USER` / `DB_PASSWORD`. The header shows which login is in use. If the server is later run as a
-Windows service, it connects as that service account, so grant that account read access.
+account **running the server process** (Integrated Security). Set `DB_AUTH=sql` to go back to `DB_USER` /
+`DB_PASSWORD`. The header shows which login is in use. If the server is later run as a Windows service, it
+connects as that service account, so grant that account read access. No ODBC driver is needed
+(`DB_ODBC_DRIVER`, used by the earlier Node.js server, is ignored).
 
 ## Run (single server)
 
 ```bash
 npm run build && npm start   # UI + API on http://localhost:3000
 ```
+
+The API serves the built UI from `client/dist/client/browser` when it exists.
+
+## Server layout
+
+```
+server/
+  SqlMonitor.sln
+  .env                      settings (git-ignored)      data/history.db   activity history (git-ignored)
+  src/API/
+    Program.cs, Startup.cs  host, logging (Serilog), request pipeline
+    Configuration/          settings (.env + environment), file locations
+    Controllers/            the /api routes
+    Middleware/             read-only guard (405), database selection (X-Target)
+    Filters/                errors -> { "error": "..." } responses
+    Infrastructure/         read-only SQL access, value formatting
+    Services/               catalog, monitor, errors, SQL activity, history store, sampler, audit reader
+  test/API.Tests/           unit tests (`npm test` or `dotnet test server/SqlMonitor.sln`)
+```
+
+`/swagger` lists the API routes.
+
+**Publishing** (`dotnet publish server/src/API -c Release -o <folder>`): put `.env` next to `API.dll` (relative
+paths such as `data/history.db` are resolved from the folder holding `.env`) and copy the built UI into a
+`wwwroot` folder beside it. `SQLMONITOR_ROOT` overrides the folder.
 
 ## Choosing the database
 
@@ -71,7 +100,7 @@ The `maui` login is `db_owner`, so read-only is enforced by the service:
 - only `GET`/`HEAD`/`OPTIONS` routes; anything else returns 405
 - every statement comes from a fixed SELECT template; table/column names must exist in the catalog and are bracket-quoted
 - all user values are bound parameters
-- `assertReadOnly()` rejects any statement containing DML/DDL/EXEC keywords
+- `Db.AssertReadOnly()` rejects any statement containing DML/DDL/EXEC keywords
 - data queries use `READ UNCOMMITTED` so long scans never block application writes (set `READ_UNCOMMITTED=false` to change)
 
 ## Performance notes
@@ -106,7 +135,7 @@ One feed (newest first, paginated, searchable, plus a "Recurring errors" tab tha
 | Production run errors | `pp_RunT.ErrorDesc` | season |
 | HQ exceptions (warnings) | `hq_ExceptionT` | season |
 
-Sources live in `server/src/errors.ts`. To add one, append an entry to `SOURCES`.
+Sources live in `server/src/API/Services/ErrorSources.cs`. To add one, append an entry to `ErrorSource.All`.
 
 **SQL Agent access:** the `maui` login cannot read `msdb` job history. Either a DBA grants it
 (the page shows the exact script) or set `MSDB_USER` / `MSDB_PASSWORD` in `server/.env` to a login that can.
