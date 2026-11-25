@@ -56,32 +56,18 @@ import { Pager } from '../../shared/pager';
           <option [value]="a" [selected]="a === action()">{{ a }}</option>
         }
       </select>
-      <input
-        type="search"
-        list="lc-users"
-        placeholder="User: pick or type…"
-        title="Pick a user from the list, or type part of a name"
-        [value]="user()"
-        (input)="later('user', $any($event.target).value)"
-      />
-      <datalist id="lc-users">
+      <select [value]="user()" (change)="user.set($any($event.target).value)" aria-label="User" title="Show only changes made by one user">
+        <option value="" [selected]="user() === ''">All users</option>
         @for (u of userOptions(); track u) {
-          <option [value]="u"></option>
+          <option [value]="u" [selected]="u === user()">{{ u }}</option>
         }
-      </datalist>
-      <input
-        type="search"
-        list="lc-tables"
-        placeholder="Table: pick or type…"
-        title="Pick a table from the list, or type part of a name"
-        [value]="table()"
-        (input)="later('table', $any($event.target).value)"
-      />
-      <datalist id="lc-tables">
+      </select>
+      <select [value]="table()" (change)="table.set($any($event.target).value)" aria-label="Table" title="Show only changes to one table">
+        <option value="" [selected]="table() === ''">All tables</option>
         @for (t of tableOptions(); track t) {
-          <option [value]="t"></option>
+          <option [value]="t" [selected]="t === table()">{{ t }}</option>
         }
-      </datalist>
+      </select>
       @if (filtered()) {
         <button type="button" class="btn" (click)="clearFilters()">Clear filters</button>
         <span class="muted small">{{ shown().length.toLocaleString() }} rows match</span>
@@ -211,7 +197,6 @@ export class LatestChanges {
   protected readonly userOptions = signal<string[]>([]);
   protected readonly tableOptions = signal<string[]>([]);
   private optionsFor = '';
-  private timers: Record<string, ReturnType<typeof setTimeout>> = {};
   protected readonly filtered = computed(() => !!(this.action() || this.user() || this.table() || this.search().trim()));
 
   protected readonly shown = computed(() => {
@@ -230,7 +215,6 @@ export class LatestChanges {
   constructor() {
     inject(DestroyRef).onDestroy(() => {
       this.sub?.unsubscribe();
-      for (const t of Object.values(this.timers)) clearTimeout(t);
     });
     effect(() => {
       this.ctx.key();
@@ -260,13 +244,7 @@ export class LatestChanges {
   }
 
   /** Applies a typed filter shortly after the last keystroke, so each letter is not a server query. */
-  later(field: 'user' | 'table', value: string): void {
-    clearTimeout(this.timers[field]);
-    this.timers[field] = setTimeout(() => this[field].set(value.trim()), 350);
-  }
-
   clearFilters(): void {
-    for (const t of Object.values(this.timers)) clearTimeout(t);
     this.action.set('');
     this.user.set('');
     this.table.set('');
