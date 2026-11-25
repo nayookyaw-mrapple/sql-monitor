@@ -4,11 +4,13 @@
   --border: #e2e6ec;
   --text: #1d2330;
   --muted: #6b7385;
-  --accent: #2f6fde;
-  --accent-soft: #e8f0fd;
-  --side-bg: #161b26;
-  --side-text: #c4cad6;
-  --side-active: #2a3243;
+  /* Mr Apple red. Change --accent and --side-bg to adjust the brand colour. */
+  --accent: #c8102e;
+  --accent-soft: #fdecef;
+  --side-bg: #a80f24;
+  --side-text: #ffffff;
+  --side-active: #ffffff2e;
+  --code-bg: #161b26;
   --pos: #1b8a4b;
   --neg: #c23b3b;
   --warn-bg: #fff6e0;
@@ -17,7 +19,7 @@
   --err-text: #9b2323;
   --info-bg: #e8f0fd;
   --info-text: #1d4c9c;
-  --row-hover: #f2f6fd;
+  --row-hover: #fbf3f4;
   --radius: 8px;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 14px;
@@ -31,10 +33,11 @@
     --border: #2a3242;
     --text: #e3e7ef;
     --muted: #8c95a8;
-    --accent: #6d9ff5;
-    --accent-soft: #1f2c45;
-    --side-bg: #0c0f15;
-    --side-active: #1f2633;
+    --accent: #f26d7d;
+    --accent-soft: #3d1a20;
+    --side-bg: #6b0c19;
+    --side-active: #ffffff24;
+    --code-bg: #0c0f15;
     --pos: #4cc37f;
     --neg: #f07171;
     --warn-bg: #3a3013;
@@ -43,7 +46,7 @@
     --err-text: #f6a6a6;
     --info-bg: #1b2a44;
     --info-text: #a9c5f7;
-    --row-hover: #202838;
+    --row-hover: #261f24;
   }
 }
 
@@ -157,7 +160,7 @@ select:focus {
 .brand-sub {
   font-size: 11px;
   letter-spacing: 0.04em;
-  opacity: 0.7;
+  opacity: 0.85;
 }
 
 .menu {
@@ -174,7 +177,7 @@ select:focus {
     align-items: center;
     text-decoration: none;
     &:hover {
-      background: #ffffff0d;
+      background: #ffffff1a;
     }
     &.active {
       background: var(--side-active);
@@ -187,7 +190,7 @@ select:focus {
   text-transform: uppercase;
   font-size: 11px;
   letter-spacing: 0.06em;
-  opacity: 0.5;
+  opacity: 0.75;
   padding: 14px 10px 6px;
 }
 
@@ -195,7 +198,7 @@ select:focus {
   font-family: Consolas, monospace;
   font-size: 12px;
   min-width: 40px;
-  color: #8fb4f8;
+  color: #ffeef0;
 }
 
 .mod-name {
@@ -207,7 +210,7 @@ select:focus {
 
 .mod-count {
   font-size: 11px;
-  opacity: 0.6;
+  opacity: 0.85;
 }
 
 .main {
@@ -254,6 +257,44 @@ select:focus {
   background: var(--neg);
   &.ok {
     background: var(--pos);
+  }
+}
+
+.ctx-note-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.ctx-note-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.ctx-note {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 41;
+  width: min(380px, calc(100vw - 32px));
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 13px;
+  line-height: 1.45;
+  p {
+    margin: 6px 0;
+  }
+  dl {
+    margin: 8px 0;
+  }
+  dt {
+    font-weight: 600;
+    margin-top: 8px;
+  }
+  dd {
+    margin: 2px 0 0;
   }
 }
 
@@ -538,12 +579,29 @@ select:focus {
   background: #fbe3e3;
   color: #a12a2a;
 }
+.tag-select {
+  background: #f1faf4;
+  color: #3d7a57;
+  box-shadow: inset 0 0 0 1px #cfe8d8;
+}
+.tag-other {
+  background: #eef0f4;
+  color: var(--muted);
+}
 .tag-warn {
   background: var(--warn-bg);
   color: var(--warn-text);
   margin-left: 6px;
 }
 @media (prefers-color-scheme: dark) {
+  .tag-select {
+    background: #12241a;
+    color: #8fcfa8;
+    box-shadow: inset 0 0 0 1px #24452f;
+  }
+  .tag-other {
+    background: #232a38;
+  }
   .tag-insert {
     background: #173826;
     color: #7fe0a6;
@@ -861,12 +919,150 @@ table {
   margin-bottom: 6px;
 }
 
+/* ---------- Guide panel (definitions) ---------- */
+
+.drawer.guide {
+  width: min(600px, 100vw);
+  font-size: 14px;
+  line-height: 1.5;
+  h3 {
+    margin: 18px 0 4px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 14px;
+  }
+  dt {
+    font-size: 13px;
+  }
+  dd {
+    padding: 0;
+    background: none;
+    font-family: inherit;
+    font-size: 13.5px;
+    white-space: normal;
+    color: var(--muted);
+  }
+  ul {
+    margin: 6px 0;
+    padding-left: 20px;
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+}
+
+/* ---------- Export dialog ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #0006;
+  z-index: 70;
+}
+
+.modal {
+  position: fixed;
+  inset: 4vh 3vw;
+  z-index: 71;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px #0005;
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  h2 {
+    margin: 0;
+    font-size: 17px;
+  }
+}
+
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px;
+  .tabs,
+  .export-note {
+    margin: 0;
+  }
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  .muted {
+    margin-right: auto;
+    font-family: Consolas, monospace;
+  }
+}
+
+.export-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  font-size: 13px;
+}
+
+.export-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+  table.grid {
+    background: var(--surface);
+  }
+  th {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    white-space: nowrap;
+  }
+  td {
+    max-width: 380px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+  }
+}
+
+.export-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--muted);
+}
+
 /* ---------- Errors page ---------- */
 
 .menu-badge {
   margin-left: auto;
-  background: #d64545;
-  color: #fff;
+  background: #fff;
+  color: #a80f24;
+  font-weight: 600;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
@@ -1115,7 +1311,7 @@ table {
 }
 
 .drawer .sql {
-  background: var(--side-bg);
+  background: var(--code-bg);
   color: #d7e3f7;
   white-space: pre;
   overflow-x: auto;
@@ -1267,7 +1463,16 @@ a.btn {
     font-size: 12.5px;
   }
   .who {
-    max-width: 260px;
+    max-width: 300px;
+  }
+  .who-login {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .app {
+    max-width: 220px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
   }
   tr.row-bad {
     background: var(--err-bg);

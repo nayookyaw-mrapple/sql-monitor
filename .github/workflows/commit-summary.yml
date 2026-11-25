@@ -1,0 +1,56 @@
+# Writes a summary of the commits in a push or pull request to the run's Summary page:
+# who made each commit, when, the message, and the files it changed.
+name: Commit summary
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commit-summary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  summary:
+    name: Commit summary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history, so the range of commits can be compared
+
+      - name: Write commit summary
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          ACTOR: ${{ github.actor }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ZERO=0000000000000000000000000000000000000000
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            FROM="$PR_BASE"; TO="$PR_HEAD"
+          elif [ "$BEFORE" != "$ZERO" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            # Normal push: everything since the previous tip of the branch.
+            FROM="$BEFORE"; TO="$SHA"
+          else
+            # New branch or force push: everything not yet on the default branch.
+            TO="$SHA"
+            FROM=$(git merge-base "origin/$DEFAULT_BRANCH" "$SHA" 2>/dev/null || true)
+            if [ "$FROM" = "$(git rev-parse "$SHA")" ]; then FROM=""; fi
+          fi
+
+          {
+            echo "Triggered by **$ACTOR** on \`$REF_NAME\` ($EVENT_NAME)"
+            echo
+            bash .github/scripts/commit-summary.sh "$FROM" "$TO"
+          } >> "$GITHUB_STEP_SUMMARY"

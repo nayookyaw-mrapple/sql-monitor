@@ -28,7 +28,7 @@ async function windowsPool(server: string, database: string): Promise<sql.Connec
     `Encrypt=${config.db.encrypt ? 'yes' : 'no'}`,
     `TrustServerCertificate=${config.db.trustServerCertificate ? 'yes' : 'no'}`,
     'ApplicationIntent=ReadOnly',
-    `APP=${odbcValue('NAY-Monitor (read-only)')}`,
+    `APP=${odbcValue('SQL Monitor (read-only)')}`,
   ].join(';');
   const pool = new native.ConnectionPool({
     connectionString,
@@ -56,7 +56,7 @@ function sqlLoginPool(server: string, database: string, msdb: boolean): sql.Conn
       // SQL `datetime` values are stored in server-local time; don't shift them to UTC.
       useUTC: false,
       readOnlyIntent: true,
-      appName: 'NAY-Monitor (read-only)',
+      appName: 'SQL Monitor (read-only)',
     },
   });
 }

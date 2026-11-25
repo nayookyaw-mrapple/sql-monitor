@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { ActivityEvent, Deadlock, LockRow, ProcStat, SqlLive, SqlScope, ErrorSourceStatus, ErrorsPage, ErrorsQuery, LatestChangeRow, RecurringError, MonitorStatus, RowsPage, RowsQuery, Summary, TableDetail, TableSummary } from './models';
+import { ActivityEvent, AuditEvent, HistoryPage, HistoryQuery, HistoryStatus, SampledActivity, Deadlock, LockRow, ProcStat, SqlLive, SqlScope, ErrorSourceStatus, ErrorsPage, ErrorsQuery, LatestChangeRow, RecurringError, MonitorStatus, RowsPage, RowsQuery, Summary, TableDetail, TableSummary } from './models';
 
 function params(obj: object): HttpParams {
   let p = new HttpParams();
@@ -71,14 +71,42 @@ export class ApiService {
     return this.http.get<{ rows: ProcStat[] }>('/api/sql/procedures', { params: params({ scope, sort }) });
   }
 
+  historyStatus(): Observable<HistoryStatus> {
+    return this.http.get<HistoryStatus>('/api/history/status');
+  }
+
+  historySampled(query: HistoryQuery): Observable<HistoryPage<SampledActivity>> {
+    return this.http.get<HistoryPage<SampledActivity>>('/api/history/sampled', { params: params(query) });
+  }
+
+  historyAudit(query: HistoryQuery): Observable<HistoryPage<AuditEvent>> {
+    return this.http.get<HistoryPage<AuditEvent>>('/api/history/audit', { params: params(query) });
+  }
+
+  /** Domain logins seen in a history log, busiest first. */
+  historyLogins(kind: 'sampled' | 'audit', scope: SqlScope): Observable<{ logins: { login: string; rows: number }[] }> {
+    return this.http.get<{ logins: { login: string; rows: number }[] }>(`/api/history/${kind}/logins`, { params: params({ scope }) });
+  }
+
+  /** Applications seen in a history log, busiest first. */
+  historyApps(kind: 'sampled' | 'audit', scope: SqlScope): Observable<{ apps: { app: string; rows: number }[] }> {
+    return this.http.get<{ apps: { app: string; rows: number }[] }>(`/api/history/${kind}/apps`, { params: params({ scope }) });
+  }
+
+  /** Every row matching the filter (up to the server's limit), for export. */
+  historyExport<T>(kind: 'sampled' | 'audit', query: Omit<HistoryQuery, 'page' | 'pageSize'>): Observable<{ rows: T[]; total: number; limit: number }> {
+    return this.http.get<{ rows: T[]; total: number; limit: number }>(`/api/history/${kind}/export`, { params: params(query) });
+  }
+
   latestChanges(
     limit = 200,
     module?: string,
     range: { from?: string; to?: string } = {},
-  ): Observable<{ monitor: MonitorStatus; rows: LatestChangeRow[]; scannedTables: number | null; elapsedMs: number }> {
-    return this.http.get<{ monitor: MonitorStatus; rows: LatestChangeRow[]; scannedTables: number | null; elapsedMs: number }>(
+    filter: { action?: string; user?: string; table?: string } = {},
+  ): Observable<{ monitor: MonitorStatus; rows: LatestChangeRow[]; scannedTables: number | null; perTable?: number; elapsedMs: number }> {
+    return this.http.get<{ monitor: MonitorStatus; rows: LatestChangeRow[]; scannedTables: number | null; perTable?: number; elapsedMs: number }>(
       '/api/latest-changes',
-      { params: params({ limit, module, from: range.from, to: range.to }) },
+      { params: params({ limit, module, from: range.from, to: range.to, ...filter }) },
     );
   }
 }

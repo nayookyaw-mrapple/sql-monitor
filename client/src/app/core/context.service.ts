@@ -59,7 +59,7 @@ export class ContextService {
       await this.selectTarget(target);
       this.loadError.set(null);
     } catch (err) {
-      this.loadError.set('Cannot reach the NAY-Monitor API. Is the server running on port 3000?');
+      this.loadError.set('Cannot reach the SQL Monitor API. Is the server running on port 3000?');
       console.error(err);
     }
   }

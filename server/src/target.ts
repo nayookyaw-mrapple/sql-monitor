@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Request } from 'express';
 
-/** A server + database NAY-Monitor can monitor. */
+/** A server + database SQL Monitor can monitor. */
 export interface Target {
   /** "server/database", lower-cased — used as the cache key and in the X-Target header. */
   id: string;

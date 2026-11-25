@@ -42,6 +42,38 @@ import { Pager } from '../../shared/pager';
       <app-date-range [range]="rangeKey()" [from]="from()" [to]="to()" (rangeChange)="setRange($event)" />
     </section>
 
+    <div class="sub-toolbar">
+      <input
+        type="search"
+        placeholder="Search table, user, details…"
+        title="Searches the rows loaded below: table, action, user and every value in Details"
+        [value]="search()"
+        (input)="search.set($any($event.target).value); page.set(1)"
+      />
+      <select [value]="action()" (change)="action.set($any($event.target).value)" aria-label="Action">
+        <option value="">All actions</option>
+        @for (a of actionOptions(); track a) {
+          <option [value]="a" [selected]="a === action()">{{ a }}</option>
+        }
+      </select>
+      <select [value]="user()" (change)="user.set($any($event.target).value)" aria-label="User" title="Show only changes made by one user">
+        <option value="" [selected]="user() === ''">All users</option>
+        @for (u of userOptions(); track u) {
+          <option [value]="u" [selected]="u === user()">{{ u }}</option>
+        }
+      </select>
+      <select [value]="table()" (change)="table.set($any($event.target).value)" aria-label="Table" title="Show only changes to one table">
+        <option value="" [selected]="table() === ''">All tables</option>
+        @for (t of tableOptions(); track t) {
+          <option [value]="t" [selected]="t === table()">{{ t }}</option>
+        }
+      </select>
+      @if (filtered()) {
+        <button type="button" class="btn" (click)="clearFilters()">Clear filters</button>
+        <span class="muted small">{{ shown().length.toLocaleString() }} rows match</span>
+      }
+    </div>
+
     @if (error(); as e) {
       <div class="banner error">{{ e }}</div>
     }
@@ -90,7 +122,12 @@ import { Pager } from '../../shared/pager';
                   @if (loading()) {
                     Loading…
                   } @else {
-                    No changes in this period for this site and season.
+                    @if (filtered()) {
+                      No changes match these filters in this period.
+                      <button type="button" class="btn" (click)="clearFilters()">Clear filters</button>
+                    } @else {
+                      No changes in this period for this site and season.
+                    }
                     @if (rangeKey() !== 'all') {
                       <button type="button" class="btn" (click)="setRange({ range: 'all', from: null, to: null })">Show all time</button>
                     }
@@ -104,7 +141,7 @@ import { Pager } from '../../shared/pager';
       <app-pager
         [page]="page()"
         [pageSize]="pageSize()"
-        [total]="rows().length"
+        [total]="shown().length"
         [sizes]="[25, 50, 100]"
         (pageChange)="page.set($event)"
         (pageSizeChange)="pageSize.set($event); page.set(1)"
@@ -114,7 +151,7 @@ import { Pager } from '../../shared/pager';
       @if (rangeKey() === 'all') {
         All time shows the 5 newest rows of each table.
       } @else {
-        Up to 25 rows per table in the selected period{{ scanned() !== null ? ' (' + scanned() + ' tables changed in this period)' : '' }}.
+        Up to {{ perTable() }} rows per table in the selected period{{ scanned() !== null ? ' (' + scanned() + ' tables changed in this period)' : '' }}.
       }
       Covers tables up to {{ (monitor()?.lastChangeScanMaxRows ?? 0).toLocaleString() }} rows. The server
       checks for new history rows every {{ (monitor()?.pollIntervalMs ?? 15000) / 1000 }}s (last check
@@ -148,16 +185,43 @@ export class LatestChanges {
   protected readonly error = signal<string | null>(null);
   protected readonly page = signal(1);
   protected readonly pageSize = signal(50);
+  protected readonly perTable = signal(25);
+
+  // Filters. Action, user and table are applied by the server (so matches are not cut off by the
+  // per-table row cap); the search box filters the rows already loaded.
+  protected readonly action = signal('');
+  protected readonly user = signal('');
+  protected readonly table = signal('');
+  protected readonly search = signal('');
+  protected readonly actionOptions = signal<string[]>([]);
+  protected readonly userOptions = signal<string[]>([]);
+  protected readonly tableOptions = signal<string[]>([]);
+  private optionsFor = '';
+  protected readonly filtered = computed(() => !!(this.action() || this.user() || this.table() || this.search().trim()));
+
+  protected readonly shown = computed(() => {
+    const words = this.search().trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return this.rows();
+    return this.rows().filter((r) => {
+      const text = [r.table, r.module, r.action, r.user, ...Object.entries(r.summary).flat()].join(' ').toLowerCase();
+      return words.every((w) => text.includes(w));
+    });
+  });
   protected readonly pageRows = computed(() => {
     const start = (this.page() - 1) * this.pageSize();
-    return this.rows().slice(start, start + this.pageSize());
+    return this.shown().slice(start, start + this.pageSize());
   });
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.sub?.unsubscribe());
+    inject(DestroyRef).onDestroy(() => {
+      this.sub?.unsubscribe();
+    });
     effect(() => {
       this.ctx.key();
       this.module();
+      this.action();
+      this.user();
+      this.table();
       this.rangeKey();
       this.from();
       this.to();
@@ -179,13 +243,37 @@ export class LatestChanges {
     this.module.set(m);
   }
 
+  /** Applies a typed filter shortly after the last keystroke, so each letter is not a server query. */
+  clearFilters(): void {
+    this.action.set('');
+    this.user.set('');
+    this.table.set('');
+    this.search.set('');
+    this.page.set(1);
+  }
+
+  /** Dropdown choices: every action, user and table seen in this database / module / period so far. */
+  private addOptions(rows: LatestChangeRow[]): void {
+    const scope = [this.ctx.key(), this.module(), this.rangeKey(), this.from(), this.to()].join('|');
+    const fresh = scope !== this.optionsFor;
+    this.optionsFor = scope;
+    const merge = (old: string[], values: (string | null)[]) =>
+      [...new Set([...(fresh ? [] : old), ...values.filter((v): v is string => !!v)])].sort((a, b) => a.localeCompare(b));
+    this.actionOptions.update((o) => merge(o, rows.map((r) => r.action)));
+    this.userOptions.update((o) => merge(o, rows.map((r) => r.user)));
+    this.tableOptions.update((o) => merge(o, rows.map((r) => r.table.replace('dbo.', ''))));
+  }
+
   load(): void {
     this.loading.set(true);
     this.sub?.unsubscribe();
     const range = resolveRange(this.rangeKey(), this.from(), this.to());
-    this.sub = this.api.latestChanges(1000, this.module() || undefined, range).subscribe({
+    const filter = { action: this.action() || undefined, user: this.user() || undefined, table: this.table() || undefined };
+    this.sub = this.api.latestChanges(1000, this.module() || undefined, range, filter).subscribe({
       next: (r) => {
         this.rows.set(r.rows);
+        this.perTable.set(r.perTable ?? 25);
+        this.addOptions(r.rows);
         this.scanned.set(r.scannedTables);
         this.monitor.set(r.monitor);
         this.error.set(null);

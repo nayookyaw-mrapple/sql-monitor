@@ -334,7 +334,7 @@ export interface SourceStatus {
   category: string;
   description: string;
   tableName: string;
-  /** Matching *_HistoryT table that NAY-Monitor can browse, if one exists. */
+  /** Matching *_HistoryT table that SQL Monitor can browse, if one exists. */
   historyTable: string | null;
   rls: ErrorSource['rls'];
   available: boolean;
@@ -454,7 +454,7 @@ function traceSql(s: ErrorSource, key: string | null, ctx: DataContext): string 
   const lines: string[] = [];
   if (s.pool === 'msdb') lines.push('USE msdb;');
   if (s.rls === 'season' || s.rls === 'season_site') {
-    lines.push('-- Row-level security: set the same site/season NAY-Monitor used');
+    lines.push('-- Row-level security: set the same site/season SQL Monitor used');
     if (s.rls === 'season_site') lines.push(`EXEC sys.sp_set_session_context @key = N'SiteID', @value = ${ctx.siteId};`);
     lines.push(`EXEC sys.sp_set_session_context @key = N'Season', @value = ${ctx.season};`);
   }

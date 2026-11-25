@@ -3,3 +3,4 @@ dist
 .angular
 server/.env
 server.log
+server/data

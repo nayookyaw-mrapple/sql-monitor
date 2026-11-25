@@ -3,12 +3,15 @@ import { config } from './config.js';
 import { catalogLoadedAt, getTable, getTables, qualified, type TableInfo } from './catalog.js';
 import { ContextError, contextFrom, contextOptions } from './context.js';
 import { CancelledError, q, readQuery, sql, type DataContext } from './db.js';
-import { activeTargets, getEvents, getLastChange, getLatestChanges, getLatestChangesInRange, monitorStatus } from './monitor.js';
+import { activeTargets, getEvents, getLastChange, getLatestChanges, getLatestChangesInRange, latestPerTable, monitorStatus } from './monitor.js';
 import { discoveryStatus } from './discovery.js';
 import { currentTarget, defaultTarget, knownTargets, targetState, TargetError } from './target.js';
 import { isoParam, serializeRow } from './serialize.js';
 import { agentGrantScript, getSource, queryErrors, recurringErrors, sourceStatuses } from './errors.js';
 import { deadlocks, liveActivity, lockSummary, procedureStats, procSortKeys, type Scope } from './sqlactivity.js';
+import { domainLogins, historyApps, historyTotals, queryAudit, querySampled, type HistoryFilter, type WhoType } from './history-store.js';
+import { samplerStatus } from './sampler.js';
+import { auditSetupScript, auditStatus } from './audit.js';
 
 export const api = Router();
 
@@ -79,7 +82,7 @@ api.get('/context', (_req, res) => {
   res.json(contextOptions());
 });
 
-/** The login NAY-Monitor is connected as: the SQL login, or DOMAIN\user with Windows Authentication. */
+/** The login SQL Monitor is connected as: the SQL login, or DOMAIN\user with Windows Authentication. */
 async function dbLogin(): Promise<string> {
   const s = targetState('login', () => ({ name: null as string | null }));
   if (!s.name) s.name = (await readQuery<{ l: string }>('SELECT SUSER_SNAME() AS l'))[0]?.l ?? '?';
@@ -288,14 +291,19 @@ api.get('/latest-changes', async (req, res) => {
   const to = str(req.query.to);
   if (from && !isLocalDateTime(from)) throw new HttpError(400, 'Invalid "from" date');
   if (to && !isLocalDateTime(to)) throw new HttpError(400, 'Invalid "to" date');
+  const filter = {
+    action: str(req.query.action)?.slice(0, 200),
+    user: str(req.query.user)?.slice(0, 200),
+    table: str(req.query.table)?.slice(0, 200),
+  };
   const started = Date.now();
   if (!from && !to) {
     // All time: newest 5 rows of every table, straight from the background cache.
-    res.json({ context: ctx, monitor: monitorStatus(ctx), rows: getLatestChanges(ctx, limit, module), scannedTables: null, elapsedMs: 0 });
+    res.json({ context: ctx, monitor: monitorStatus(ctx), rows: getLatestChanges(ctx, limit, module, filter), scannedTables: null, perTable: 5, elapsedMs: 0 });
     return;
   }
-  const r = await getLatestChangesInRange(ctx, limit, module, from, to, abortOnClose(res));
-  res.json({ context: ctx, monitor: monitorStatus(ctx), rows: r.rows, scannedTables: r.scannedTables, elapsedMs: Date.now() - started });
+  const r = await getLatestChangesInRange(ctx, limit, module, from, to, abortOnClose(res), filter);
+  res.json({ context: ctx, monitor: monitorStatus(ctx), rows: r.rows, scannedTables: r.scannedTables, perTable: latestPerTable(filter), elapsedMs: Date.now() - started });
 });
 
 /* ---------------- Errors & failures ---------------- */
@@ -361,6 +369,92 @@ api.get('/sql/procedures', async (req, res) => {
   const sort = str(req.query.sort) ?? 'total';
   if (!procSortKeys.includes(sort)) throw new HttpError(400, 'Invalid sort');
   res.json({ rows: await procedureStats(scopeOf(req), sort, abortOnClose(res)) });
+});
+
+/* ---------------- Activity history (local SQLite: sampled activity + SQL Server Audit records) ---------------- */
+
+const HISTORY_ACTIONS = ['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'SELECT', 'EXECUTE', 'TRUNCATE', 'DDL', 'OTHER'];
+
+function historyFilter(req: Request): HistoryFilter {
+  const from = str(req.query.from);
+  const to = str(req.query.to);
+  if (from && !isLocalDateTime(from)) throw new HttpError(400, 'Invalid "from" date');
+  if (to && !isLocalDateTime(to)) throw new HttpError(400, 'Invalid "to" date');
+  const action = str(req.query.action)?.toUpperCase();
+  if (action && !HISTORY_ACTIONS.includes(action)) throw new HttpError(400, 'Invalid action');
+  const whoType = str(req.query.whoType);
+  if (whoType && !['agent', 'user', 'maui', 'other'].includes(whoType)) throw new HttpError(400, 'Invalid whoType');
+  const capture = str(req.query.capture);
+  if (capture && capture !== 'running' && capture !== 'last') throw new HttpError(400, 'Invalid capture');
+  const requestedSize = Number.parseInt(String(req.query.pageSize ?? '50'), 10);
+  return {
+    server: currentTarget().server,
+    db: scopeOf(req) === 'server' ? undefined : currentTarget().database,
+    from: from ? isoParam(from) : undefined,
+    to: to ? isoParam(to, true) : undefined,
+    action,
+    search: str(req.query.search),
+    who: str(req.query.who),
+    whoType: whoType as WhoType | undefined,
+    login: str(req.query.login),
+    notLogin: str(req.query.notLogin),
+    app: str(req.query.app),
+    capture: capture as 'running' | 'last' | undefined,
+    page: Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1),
+    pageSize: PAGE_SIZES.includes(requestedSize) ? requestedSize : 50,
+  };
+}
+
+api.get('/history/status', async (_req, res) => {
+  const { server, database } = currentTarget();
+  res.json({
+    server,
+    retentionDays: config.history.retentionDays,
+    sampler: samplerStatus(server),
+    audit: auditStatus(server),
+    totals: historyTotals(server),
+    auditSetupScript: auditSetupScript(database, await dbLogin()),
+  });
+});
+
+api.get('/history/sampled', (req, res) => {
+  const f = historyFilter(req);
+  res.json({ ...querySampled(f), page: f.page, pageSize: f.pageSize });
+});
+
+api.get('/history/audit', (req, res) => {
+  const f = historyFilter(req);
+  res.json({ ...queryAudit(f), page: f.page, pageSize: f.pageSize });
+});
+
+/** Domain logins seen in the log (for the login dropdown), busiest first. */
+api.get('/history/:kind/logins', (req, res) => {
+  const kind = String(req.params.kind);
+  if (kind !== 'sampled' && kind !== 'audit') throw new HttpError(404, 'Unknown history log');
+  res.json({ logins: domainLogins(kind, currentTarget().server, scopeOf(req) === 'server' ? undefined : currentTarget().database) });
+});
+
+/** Applications seen in the log (for the app dropdown), busiest first. */
+api.get('/history/:kind/apps', (req, res) => {
+  const kind = String(req.params.kind);
+  if (kind !== 'sampled' && kind !== 'audit') throw new HttpError(404, 'Unknown history log');
+  res.json({ apps: historyApps(kind, currentTarget().server, scopeOf(req) === 'server' ? undefined : currentTarget().database) });
+});
+
+/** Most rows one export can hold. `total` in the response says how many matched, so the client can tell when it was cut. */
+const EXPORT_MAX_ROWS = 20_000;
+
+/** Every row matching the filter (newest first, not just one page), for the Excel / PDF export. */
+api.get('/history/sampled/export', (req, res) => {
+  const f = { ...historyFilter(req), page: 1, pageSize: EXPORT_MAX_ROWS };
+  const r = querySampled(f);
+  res.json({ rows: r.rows, total: r.total, limit: EXPORT_MAX_ROWS });
+});
+
+api.get('/history/audit/export', (req, res) => {
+  const f = { ...historyFilter(req), page: 1, pageSize: EXPORT_MAX_ROWS };
+  const r = queryAudit(f);
+  res.json({ rows: r.rows, total: r.total, limit: EXPORT_MAX_ROWS });
 });
 
 // Express 5 forwards async errors here.

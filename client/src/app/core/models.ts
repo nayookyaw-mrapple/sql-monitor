@@ -371,3 +371,105 @@ export interface ProcStat {
   avgReads: number;
   avgWrites: number;
 }
+
+/* ---------------- Activity history (saved locally by the server) ---------------- */
+
+/** One statement the sampler saw executing. Sampled every few seconds, so fast statements are missing. */
+export interface SampledActivity {
+  id: number;
+  db: string | null;
+  sessionId: number;
+  requestStart: string | null;
+  firstSeen: string;
+  lastSeen: string;
+  samples: number;
+  action: string;
+  command: string | null;
+  procName: string | null;
+  statement: string | null;
+  tables: string | null;
+  loginName: string | null;
+  hostName: string | null;
+  clientAddress: string | null;
+  programName: string | null;
+  jobName: string | null;
+  elapsedMs: number | null;
+  cpuMs: number | null;
+  logicalReads: number | null;
+  writes: number | null;
+  rowsAffected: number | null;
+  /** running = seen while executing; last = the session's last finished batch, picked up afterwards. */
+  capture: 'running' | 'last';
+  /** The application it came from: service name (from the pod name), "SQL Agent", or the client's application name. */
+  app: string | null;
+}
+
+/** One SQL Server Audit record. */
+export interface AuditEvent {
+  id: number;
+  eventTime: string;
+  action: string;
+  actionId: string;
+  succeeded: boolean;
+  sessionId: number | null;
+  db: string | null;
+  schemaName: string | null;
+  objectName: string | null;
+  classType: string | null;
+  loginName: string | null;
+  sessionLogin: string | null;
+  dbUser: string | null;
+  hostName: string | null;
+  clientIp: string | null;
+  programName: string | null;
+  statement: string | null;
+  /** The application it came from: service name (from the pod name), "SQL Agent", or the client's application name. */
+  app: string | null;
+}
+
+export interface HistoryPage<T> {
+  rows: T[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface HistoryQuery {
+  scope: SqlScope;
+  from?: string;
+  to?: string;
+  action?: string;
+  search?: string;
+  /** Text to find in the Who columns only. */
+  who?: string;
+  whoType?: 'agent' | 'user' | 'maui' | 'other';
+  /** Only this login. */
+  login?: string;
+  /** Leave this login out. */
+  notLogin?: string;
+  /** Only this application (exact). */
+  app?: string;
+  /** Sampled log only: how the row was captured. */
+  capture?: 'running' | 'last';
+  page: number;
+  pageSize: number;
+}
+
+export interface HistoryStatus {
+  server: string;
+  retentionDays: number;
+  sampler: { enabled: boolean; intervalMs: number; lastPollAt: string | null; lastError: string | null };
+  audit: {
+    enabled: boolean;
+    auditName: string;
+    /** null = not checked yet. */
+    found: boolean | null;
+    auditEnabled: boolean | null;
+    filePattern: string | null;
+    lastReadAt: string | null;
+    lastError: string | null;
+  };
+  totals: { sampledRows: number; sampledOldest: string | null; auditRows: number; auditOldest: string | null };
+  auditSetupScript: string;
+}

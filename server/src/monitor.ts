@@ -106,6 +106,21 @@ export function monitorStatus(ctx?: DataContext) {
  * Only tables whose newest change (from the background scan) falls inside the range are
  * queried, so "last 7 days" touches just the handful of tables that actually changed.
  */
+/** Optional filters for the latest-changes feed. `user` and `table` match part of the value. */
+export interface LatestFilter {
+  action?: string;
+  user?: string;
+  table?: string;
+}
+
+/** Rows read per table: more when a filter narrows the result, so matches are not cut off at 25. */
+export function latestPerTable(f: LatestFilter): number {
+  if (f.table) return 200;
+  return f.user || f.action ? 100 : 25;
+}
+
+const has = (value: string | null, part: string) => (value ?? '').toLowerCase().includes(part.toLowerCase());
+
 export async function getLatestChangesInRange(
   ctx: DataContext,
   limit: number,
@@ -113,9 +128,10 @@ export async function getLatestChangesInRange(
   from: string | undefined,
   to: string | undefined,
   signal?: AbortSignal,
+  filter: LatestFilter = {},
 ): Promise<{ rows: LatestChangeRow[]; scannedTables: number }> {
   const { rangeCache } = mon();
-  const key = `${contextKey(ctx)}|${module ?? ''}|${from ?? ''}|${to ?? ''}|${limit}`;
+  const key = `${contextKey(ctx)}|${module ?? ''}|${from ?? ''}|${to ?? ''}|${limit}|${JSON.stringify([filter.action, filter.user, filter.table])}`;
   const hit = rangeCache.get(key);
   if (hit && Date.now() - hit.at < 20_000) return { rows: hit.rows, scannedTables: hit.scanned };
 
@@ -123,6 +139,9 @@ export async function getLatestChangesInRange(
   const fromCmp = from?.replace('T', ' ');
   const candidates = getTables().filter((t) => {
     if (module && t.module !== module) return false;
+    if (filter.table && !has(t.fullName, filter.table)) return false;
+    if (filter.action && !t.actionColumn) return false;
+    if (filter.user && !t.userColumn) return false;
     if (t.rowCount > config.lastChangeScanMaxRows) return false;
     if (!t.columns.some((c) => c.name === t.sortColumn && DATE_TYPES.has(c.type))) return false;
     const last = cache.lastChange.get(t.fullName.toLowerCase());
@@ -131,10 +150,12 @@ export async function getLatestChangesInRange(
     return true;
   });
 
-  const perTable = 25;
+  const perTable = latestPerTable(filter);
   const params: Record<string, { type: sql.ISqlType; value: unknown }> = {};
   if (from) params.from = { type: sql.VarChar(30), value: isoParam(from) };
   if (to) params.to = { type: sql.VarChar(30), value: isoParam(to, true) };
+  if (filter.action) params.action = { type: sql.NVarChar(200), value: filter.action };
+  if (filter.user) params.user = { type: sql.NVarChar(200), value: filter.user };
 
   const out: LatestChangeRow[] = [];
   let i = 0;
@@ -146,6 +167,8 @@ export async function getLatestChangesInRange(
         const w: string[] = [];
         if (from) w.push(`${col} >= CONVERT(datetime2, @from, 126)`);
         if (to) w.push(`${col} <= CONVERT(datetime2, @to, 126)`);
+        if (filter.action) w.push(`${q(t.actionColumn!)} = @action`);
+        if (filter.user) w.push(`CHARINDEX(@user, ${q(t.userColumn!)}) > 0`);
         const tie = t.primaryKey.filter((k) => k !== t.sortColumn).map((k) => `${q(k)} DESC`);
         try {
           const rows = await readQuery<Record<string, unknown>>(
@@ -180,10 +203,16 @@ function toLatestRow(t: TableInfo, r: Record<string, unknown>): LatestChangeRow 
   };
 }
 
-export function getLatestChanges(ctx: DataContext, limit: number, module?: string): LatestChangeRow[] {
+export function getLatestChanges(ctx: DataContext, limit: number, module?: string, filter: LatestFilter = {}): LatestChangeRow[] {
   const all: LatestChangeRow[] = [];
   for (const rows of cacheFor(ctx).latestRows.values()) {
-    for (const r of rows) if (!module || r.module === module) all.push(r);
+    for (const r of rows) {
+      if (module && r.module !== module) continue;
+      if (filter.table && !has(r.table, filter.table)) continue;
+      if (filter.action && (r.action ?? '').toLowerCase() !== filter.action.toLowerCase()) continue;
+      if (filter.user && !has(r.user, filter.user)) continue;
+      all.push(r);
+    }
   }
   all.sort((a, b) => (b.changedAt ?? '').localeCompare(a.changedAt ?? ''));
   return all.slice(0, limit);
