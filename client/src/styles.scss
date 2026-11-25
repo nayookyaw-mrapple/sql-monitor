@@ -173,9 +173,10 @@ select:focus {
     padding: 7px 10px;
     border-radius: 6px;
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
     text-decoration: none;
+    line-height: 20px;
     &:hover {
       background: #ffffff1a;
     }
@@ -184,6 +185,27 @@ select:focus {
       color: #fff;
     }
   }
+}
+
+/* Same box for every icon, so the labels start on one line. */
+.menu-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+}
+
+.menu-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menu-title {

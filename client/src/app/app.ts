@@ -17,18 +17,18 @@ import { MODULE_NAMES, ModuleSummary } from './core/models';
 
         <nav class="menu" (click)="navOpen.set(false)">
           <div class="menu-title">Monitor</div>
-          <a routerLink="/dashboard" routerLinkActive="active">▦ Dashboard</a>
+          <a routerLink="/dashboard" routerLinkActive="active"><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg><span class="menu-text">Dashboard</span></a>
           <a routerLink="/errors" routerLinkActive="active">
-            ⚠ Errors &amp; failures
+            <svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 2.5 20h19L12 3.5z" /><path d="M12 10v4.5" /><path d="M12 17.5v.01" /></svg><span class="menu-text">Errors &amp; failures</span>
             @if (errors24h() > 0) {
               <span class="menu-badge" title="Errors in the last 24 hours">{{ errors24h() }}</span>
             }
           </a>
-          <a routerLink="/jobs" routerLinkActive="active">⚙ SQL Agent jobs</a>
-          <a routerLink="/sql" routerLinkActive="active">⛁ SQL activity &amp; locks</a>
-          <a routerLink="/latest-changes" routerLinkActive="active">⟲ Latest changes</a>
-          <a routerLink="/activity" routerLinkActive="active">⚡ Live activity</a>
-          <a routerLink="/tables" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">☰ All history tables</a>
+          <a routerLink="/jobs" routerLinkActive="active"><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg><span class="menu-text">SQL Agent jobs</span></a>
+          <a routerLink="/sql" routerLinkActive="active"><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="8" ry="3" /><path d="M4 5.5v6.5c0 1.66 3.58 3 8 3s8-1.34 8-3V5.5" /><path d="M4 12v6.5c0 1.66 3.58 3 8 3s8-1.34 8-3V12" /></svg><span class="menu-text">SQL activity &amp; locks</span></a>
+          <a routerLink="/latest-changes" routerLinkActive="active"><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7.5V12l3 2" /></svg><span class="menu-text">Latest changes</span></a>
+          <a routerLink="/activity" routerLinkActive="active"><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" /></svg><span class="menu-text">Live activity</span></a>
+          <a routerLink="/tables" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18" /><path d="M3 15h18" /><path d="M9 10v10" /></svg><span class="menu-text">All history tables</span></a>
 
           <div class="menu-title">Modules</div>
           @for (m of modules(); track m.module) {
