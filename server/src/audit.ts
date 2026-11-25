@@ -1,7 +1,7 @@
 /**
  * Audit reader: copies new SQL Server Audit records into the local SQLite history.
  *
- * NAY-Monitor never creates or changes the audit. A DBA sets it up once per server with the script from
+ * SQL Monitor never creates or changes the audit. A DBA sets it up once per server with the script from
  * auditSetupScript() (shown on the Audit history tab); until then this just reports "not set up".
  * Reading uses sys.fn_get_audit_file, a plain SELECT.
  */
@@ -176,13 +176,13 @@ export function auditStatus(server: string) {
 const ident = (v: string) => `[${v.replace(/]/g, ']]')}]`;
 
 /**
- * The one-time setup a DBA runs. NAY-Monitor only displays this text; it never runs it.
+ * The one-time setup a DBA runs. SQL Monitor only displays this text; it never runs it.
  * Covers every table and procedure in the database (INSERT/UPDATE/DELETE/EXECUTE by anyone).
  */
 export function auditSetupScript(database: string, login: string): string {
   const audit = ident(config.history.auditName);
   const spec = ident(`${config.history.auditName}_${database}`);
-  return `-- NAY-Monitor audit setup. Run once, as a sysadmin. NAY-Monitor itself never runs this.
+  return `-- SQL Monitor audit setup. Run once, as a sysadmin. SQL Monitor itself never runs this.
 -- Records every INSERT / UPDATE / DELETE / EXECUTE on every table and procedure in ${database}.
 -- ON_FAILURE = CONTINUE: if the audit cannot write, applications keep working.
 -- Disk use is capped at MAXSIZE x MAX_ROLLOVER_FILES (about 10 GB below); the oldest file is then reused.
@@ -202,7 +202,7 @@ CREATE DATABASE AUDIT SPECIFICATION ${spec}
   ADD (INSERT, UPDATE, DELETE, EXECUTE ON DATABASE::${ident(database)} BY [public])
   WITH (STATE = ON);
 
--- 3) Let NAY-Monitor read the audit files (SQL Server 2022+).
+-- 3) Let SQL Monitor read the audit files (SQL Server 2022+).
 --    On older versions use: GRANT CONTROL SERVER TO ${ident(login)};
 USE master;
 GRANT VIEW SERVER SECURITY AUDIT TO ${ident(login)};

@@ -137,7 +137,7 @@ function bytes(n: number | null | undefined): string {
                       @if (r.procName) {
                         <div class="proc">{{ r.procName }}</div>
                       } @else {
-                        <div class="proc muted">{{ r.command }} (ad hoc)</div>
+                        <div class="proc muted" title="This SQL was sent directly, not run from inside a stored procedure">{{ r.command }} · direct SQL (no procedure)</div>
                       }
                       <div class="clamp mono small">{{ oneLine(r.statement) }}</div>
                     </td>
@@ -314,6 +314,7 @@ function bytes(n: number | null | undefined): string {
               — history available since {{ deadlockOldest()!.slice(0, 16) }} (older files roll over automatically).
             }
           </span>
+          <button type="button" class="btn info-btn" style="margin-left: auto" (click)="dlGuide.set(true)" title="What a deadlock is, and what victim and winner mean" aria-label="Guide">ⓘ Guide</button>
         </div>
         <section class="card flush">
           <div class="table-wrap">
@@ -456,7 +457,7 @@ function bytes(n: number | null | undefined): string {
         @switch (s.kind) {
           @case ('running') {
             <dl>
-              <dt>Procedure</dt><dd>{{ s.row.procName ?? '(ad hoc ' + s.row.command + ')' }}</dd>
+              <dt>Procedure</dt><dd>{{ s.row.procName ?? 'None: direct SQL (' + s.row.command + '), not run from a stored procedure' }}</dd>
               <dt>Database</dt><dd>{{ s.row.db }}</dd>
               <dt>Running for</dt><dd>{{ fmt(s.row.elapsedMs) }} (started {{ s.row.startTime }})</dd>
               <dt>Status / wait</dt>
@@ -537,6 +538,90 @@ function bytes(n: number | null | undefined): string {
         }
       </aside>
     }
+
+    @if (dlGuide()) {
+      <div class="drawer-backdrop" (click)="dlGuide.set(false)"></div>
+      <aside class="drawer guide">
+        <div class="drawer-head">
+          <h2>Guide · Deadlocks</h2>
+          <button type="button" class="btn" (click)="dlGuide.set(false)">✕</button>
+        </div>
+
+        <p>
+          A <strong>deadlock</strong> is two (or more) sessions each holding a lock the other one needs, so neither can ever finish. SQL Server
+          notices within a few seconds and ends it by cancelling one of them. This tab lists every deadlock SQL Server has recorded.
+        </p>
+
+        <h3>Victim and winner</h3>
+        <dl>
+          <dt><span class="sev sev-error">victim</span></dt>
+          <dd>
+            The session SQL Server chose to cancel. Its statement was stopped, its whole transaction was undone (rolled back), and the
+            application received error 1205, "chosen as the deadlock victim". Unless the application tries again, that work did not happen.
+          </dd>
+          <dt>Winner(s)</dt>
+          <dd>The other session(s). They kept their locks and carried on normally. In the detail panel they are marked "Completed".</dd>
+          <dt>How the victim is chosen</dt>
+          <dd>
+            Normally the session whose transaction is cheapest to undo. A session can change this with
+            <span class="mono">SET DEADLOCK_PRIORITY</span>: a lower priority is chosen first.
+          </dd>
+        </dl>
+
+        <h3>Columns</h3>
+        <dl>
+          <dt>When</dt>
+          <dd>When SQL Server detected the deadlock, in the server's local time.</dd>
+          <dt>Database</dt>
+          <dd>The database(s) the sessions were working in.</dd>
+          <dt>Objects</dt>
+          <dd>The tables or indexes the sessions were fighting over.</dd>
+          <dt>Victim (rolled back) / Winner(s)</dt>
+          <dd>
+            First line: the stored procedure, or the start of the SQL when it was sent directly. Second line: the application (or Agent job)
+            and the computer it ran from.
+          </dd>
+        </dl>
+
+        <h3>Detail panel (click a row)</h3>
+        <dl>
+          <dt>Procedure</dt>
+          <dd>The procedure and line number each session was on when it got stuck.</dd>
+          <dt>Wanted lock</dt>
+          <dd>
+            The lock the session was waiting for and could not get, what it was on, and how long it waited. S = shared (reading),
+            U = update (about to change), X = exclusive (changing). A leading I (IS, IX) is an "intent" lock on the page or table above the row.
+          </dd>
+          <dt>Isolation</dt>
+          <dd>The session's isolation level. It decides how long read locks are held: the stricter the level, the more likely a deadlock.</dd>
+          <dt>SQL</dt>
+          <dd>The batch the session had sent. For a procedure call this is the call, not the statement inside it.</dd>
+        </dl>
+
+        <h3>What to do about them</h3>
+        <dl>
+          <dt>One now and then</dt>
+          <dd>Normal on a busy database. The application should catch error 1205 and try the transaction again.</dd>
+          <dt>The same pair again and again</dt>
+          <dd>
+            Worth fixing. Common causes: two pieces of code touch the same tables in a different order; a query scans many rows because an
+            index is missing; a transaction is kept open longer than it needs to be.
+          </dd>
+          <dt>A SELECT is the victim</dt>
+          <dd>
+            A reader and a writer collided. Turning on <span class="mono">READ_COMMITTED_SNAPSHOT</span> for the database lets readers stop
+            taking shared locks, which removes most of these. That is a database-wide change for a DBA to decide.
+          </dd>
+        </dl>
+
+        <h3>Where this comes from</h3>
+        <p>
+          SQL Server's built-in <span class="table-name">system_health</span> session, which is always on. Its files are a fixed size and the
+          oldest are overwritten, so the history only goes back as far as the date shown above the table. The counts on the tab and the tile
+          cover what is still in those files.
+        </p>
+      </aside>
+    }
   `,
 })
 export class SqlActivity {
@@ -558,6 +643,8 @@ export class SqlActivity {
   protected readonly procSort = signal('total');
   protected readonly procFilter = signal('');
   protected readonly dlFilter = signal('');
+  /** The deadlocks guide panel (what victim, winner and the columns mean) is open. */
+  protected readonly dlGuide = signal(false);
   protected readonly dlPage = signal(1);
   protected readonly dlPageSize = signal(25);
 
@@ -723,7 +810,7 @@ export class SqlActivity {
 
   procLabel(p: { procName: string | null; inputBuffer: string | null }): string {
     if (p.procName && p.procName !== 'adhoc' && p.procName !== 'unknown') return p.procName;
-    return `ad hoc: ${this.oneLine(p.inputBuffer).slice(0, 80)}`;
+    return `Direct SQL: ${this.oneLine(p.inputBuffer).slice(0, 80)}`;
   }
 
   shortObjects(o: string | null): string {

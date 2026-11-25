@@ -1,5 +1,5 @@
 /**
- * Local SQLite file that keeps the activity history (who ran what). This is the only thing NAY-Monitor
+ * Local SQLite file that keeps the activity history (who ran what). This is the only thing SQL Monitor
  * writes to, and it lives on the machine running the server — never on SQL Server.
  *
  *  - sampled_activity: what the sampler saw in "Running now" (incomplete by nature: fast statements are missed).
@@ -20,6 +20,10 @@ type Value = string | number | null;
 export interface SampleRow {
   /** Identifies one statement of one request, so repeated sightings update the same row. */
   key: string;
+  /** running = seen while executing; last = the session's last finished batch, picked up after the fact. */
+  capture: 'running' | 'last';
+  /** When it was seen (running) or when it ended (last). */
+  seenAt: string;
   db: string | null;
   sessionId: number;
   requestStart: string | null;
@@ -132,6 +136,9 @@ function db(): DatabaseSync {
       file_offset TEXT
     );
   `);
+  // Added after the first release: how the row was captured.
+  const cols = d.prepare('PRAGMA table_info(sampled_activity)').all() as { name: string }[];
+  if (!cols.some((c) => c.name === 'capture')) d.exec("ALTER TABLE sampled_activity ADD COLUMN capture TEXT NOT NULL DEFAULT 'running'");
   handle = d;
   return d;
 }
@@ -151,20 +158,20 @@ function inTransaction<T>(fn: () => T): T {
 
 /* ---------------- Writes ---------------- */
 
-export function saveSamples(server: string, seenAt: string, rows: SampleRow[]): void {
+export function saveSamples(server: string, rows: SampleRow[]): void {
   if (rows.length === 0) return;
   const st = db().prepare(
     `INSERT INTO sampled_activity (key, server, db, session_id, request_start, first_seen, last_seen, action, command, proc_name, statement,
-       tables, login_name, host_name, client_address, program_name, job_name, elapsed_ms, cpu_ms, logical_reads, writes, rows_affected)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       tables, login_name, host_name, client_address, program_name, job_name, elapsed_ms, cpu_ms, logical_reads, writes, rows_affected, capture)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (key) DO UPDATE SET last_seen = excluded.last_seen, samples = samples + 1, elapsed_ms = excluded.elapsed_ms,
        cpu_ms = excluded.cpu_ms, logical_reads = excluded.logical_reads, writes = excluded.writes, rows_affected = excluded.rows_affected`,
   );
   inTransaction(() => {
     for (const r of rows) {
       st.run(
-        r.key, server, r.db, r.sessionId, r.requestStart, seenAt, seenAt, r.action, r.command, r.procName, r.statement,
-        r.tables, r.loginName, r.hostName, r.clientAddress, r.programName, r.jobName, r.elapsedMs, r.cpuMs, r.logicalReads, r.writes, r.rowsAffected,
+        r.key, server, r.db, r.sessionId, r.requestStart, r.seenAt, r.seenAt, r.action, r.command, r.procName, r.statement,
+        r.tables, r.loginName, r.hostName, r.clientAddress, r.programName, r.jobName, r.elapsedMs, r.cpuMs, r.logicalReads, r.writes, r.rowsAffected, r.capture,
       );
     }
   });
@@ -229,15 +236,43 @@ export interface HistoryFilter {
   to?: string;
   action?: string;
   search?: string;
+  /** Text to find in the "who" columns only (login, host, app, job, client address). */
+  who?: string;
+  /** Kind of login: SQL Agent jobs, Windows domain users, the MAUI .NET services, or everything that is not an Agent job or a user. */
+  whoType?: WhoType;
+  /** Only this login (exact, case-insensitive). */
+  login?: string;
+  /** Leave this login out, e.g. a label printer account that runs every few seconds. */
+  notLogin?: string;
+  /** Sampled log only: how the row was captured. */
+  capture?: 'running' | 'last';
   page: number;
   pageSize: number;
 }
 
+export type WhoType = 'agent' | 'user' | 'maui' | 'other';
+
+/** SQL Agent job steps: by program name, or by the Agent service account. */
+const IS_AGENT = `(COALESCE(program_name, '') LIKE 'SQLAgent%' OR COALESCE(login_name, '') LIKE '%SQLSERVERAGENT%')`;
+/** Windows domain accounts (DOMAIN\name), leaving out the built-in NT SERVICE / NT AUTHORITY accounts. */
+const IS_USER = `(COALESCE(login_name, '') LIKE '%\\%' AND COALESCE(login_name, '') NOT LIKE 'NT %' AND NOT ${IS_AGENT})`;
+const WHO_TYPE: Record<WhoType, string> = {
+  agent: IS_AGENT,
+  user: IS_USER,
+  // The MAUI .NET services: they connect with the "Core Microsoft SqlClient Data Provider" application name.
+  maui: `COALESCE(program_name, '') LIKE 'Core Microsoft SqlClient%'`,
+  other: `(NOT ${IS_AGENT} AND NOT ${IS_USER})`,
+};
+
 const like = (v: string) => `%${v.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
-function page(table: string, timeCol: string, searchCols: string[], select: string, f: HistoryFilter) {
+function page(table: string, timeCol: string, searchCols: string[], whoCols: string[], select: string, f: HistoryFilter) {
   const where = ['server = ?'];
   const params: Value[] = [f.server];
+  if (f.capture && table === 'sampled_activity') {
+    where.push('capture = ?');
+    params.push(f.capture);
+  }
   if (f.db) {
     where.push('db = ? COLLATE NOCASE');
     params.push(f.db);
@@ -258,6 +293,19 @@ function page(table: string, timeCol: string, searchCols: string[], select: stri
     where.push(`(${searchCols.map((c) => `${c} LIKE ? ESCAPE '\\'`).join(' OR ')})`);
     for (let i = 0; i < searchCols.length; i++) params.push(like(f.search));
   }
+  if (f.who) {
+    where.push(`(${whoCols.map((c) => `${c} LIKE ? ESCAPE '\\'`).join(' OR ')})`);
+    for (let i = 0; i < whoCols.length; i++) params.push(like(f.who));
+  }
+  if (f.whoType) where.push(WHO_TYPE[f.whoType]);
+  if (f.login) {
+    where.push('login_name = ? COLLATE NOCASE');
+    params.push(f.login);
+  }
+  if (f.notLogin) {
+    where.push("COALESCE(login_name, '') <> ? COLLATE NOCASE");
+    params.push(f.notLogin);
+  }
   const whereSql = where.join(' AND ');
   const total = Number((db().prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${whereSql}`).get(...params) as { n: number }).n);
   const rows = db()
@@ -271,10 +319,11 @@ export function querySampled(f: HistoryFilter) {
     'sampled_activity',
     'first_seen',
     ['statement', 'proc_name', 'tables', 'login_name', 'host_name', 'program_name', 'job_name', 'client_address'],
+    ['login_name', 'host_name', 'program_name', 'job_name', 'client_address'],
     `id, db, session_id AS sessionId, request_start AS requestStart, first_seen AS firstSeen, last_seen AS lastSeen, samples, action, command,
      proc_name AS procName, statement, tables, login_name AS loginName, host_name AS hostName, client_address AS clientAddress,
      program_name AS programName, job_name AS jobName, elapsed_ms AS elapsedMs, cpu_ms AS cpuMs, logical_reads AS logicalReads,
-     writes, rows_affected AS rowsAffected`,
+     writes, rows_affected AS rowsAffected, capture`,
     f,
   );
 }
@@ -284,12 +333,28 @@ export function queryAudit(f: HistoryFilter) {
     'audit_event',
     'event_time',
     ['object_name', 'statement', 'login_name', 'session_login', 'db_user', 'host_name', 'client_ip', 'program_name'],
+    ['login_name', 'session_login', 'db_user', 'host_name', 'client_ip', 'program_name'],
     `id, event_time AS eventTime, action, action_id AS actionId, succeeded, session_id AS sessionId, db, schema_name AS schemaName,
      object_name AS objectName, class_type AS classType, login_name AS loginName, session_login AS sessionLogin, db_user AS dbUser,
      host_name AS hostName, client_ip AS clientIp, program_name AS programName, statement`,
     f,
   );
   return { ...r, rows: r.rows.map((x) => ({ ...x, succeeded: x.succeeded === 1 })) };
+}
+
+/** The Windows domain logins seen in a log, busiest first, for the login dropdown. */
+export function domainLogins(kind: 'sampled' | 'audit', server: string, dbName?: string): { login: string; rows: number }[] {
+  const table = kind === 'sampled' ? 'sampled_activity' : 'audit_event';
+  const params: Value[] = [server];
+  if (dbName) params.push(dbName);
+  return db()
+    .prepare(
+      `SELECT login_name AS login, COUNT(*) AS rows FROM ${table}
+       WHERE server = ? ${dbName ? 'AND db = ? COLLATE NOCASE' : ''} AND ${IS_USER}
+       GROUP BY login_name COLLATE NOCASE ORDER BY COUNT(*) DESC, login_name LIMIT 300`,
+    )
+    .all(...params)
+    .map((r) => ({ login: String(r.login), rows: Number(r.rows) }));
 }
 
 /** Row counts and oldest row per log, for the status line. */

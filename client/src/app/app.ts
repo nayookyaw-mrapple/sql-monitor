@@ -12,7 +12,7 @@ import { MODULE_NAMES, ModuleSummary } from './core/models';
       <aside class="sidebar">
         <a class="brand" routerLink="/dashboard">
           <img class="brand-logo" src="logo-white.png" alt="Mr Apple" />
-          <div class="brand-sub">NAY-Monitor · read-only</div>
+          <div class="brand-sub">SQL Monitor · read-only</div>
         </a>
 
         <nav class="menu" (click)="navOpen.set(false)">

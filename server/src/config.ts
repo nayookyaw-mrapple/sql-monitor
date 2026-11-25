@@ -98,9 +98,9 @@ export const config = {
     auditPollMs: Math.max(5000, int('HISTORY_AUDIT_POLL_MS', 30_000)),
     /** Rows older than this are deleted from the SQLite file. */
     retentionDays: Math.max(1, int('HISTORY_RETENTION_DAYS', 30)),
-    /** Name of the SQL Server Audit a DBA created for NAY-Monitor (see the Audit history tab for the script). */
-    auditName: process.env.HISTORY_AUDIT_NAME || 'NAY_Monitor_Audit',
-    /** Optional: audit file pattern (e.g. D:\SQLAudit\NAY_Monitor_Audit_*.sqlaudit) when it can't be looked up. */
+    /** Name of the SQL Server Audit a DBA created for SQL Monitor (see the Audit history tab for the script). */
+    auditName: process.env.HISTORY_AUDIT_NAME || 'SQL_Monitor_Audit',
+    /** Optional: audit file pattern (e.g. D:\SQLAudit\SQL_Monitor_Audit_*.sqlaudit) when it can't be looked up. */
     auditFilePattern: process.env.HISTORY_AUDIT_FILE_PATTERN || '',
   },
 };

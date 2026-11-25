@@ -58,6 +58,7 @@ export function actionClass(action: string | null | undefined): string {
   if (a.includes('insert') || a.includes('add') || a.includes('creat')) return 'tag-insert';
   if (a.includes('delet') || a.includes('remov')) return 'tag-delete';
   if (a.includes('updat') || a.includes('modif') || a.includes('chang')) return 'tag-update';
+  if (a.includes('select')) return 'tag-select';
   return 'tag-other';
 }
 

@@ -78,7 +78,7 @@ const LAST_SEEN_KEY = 'nay-monitor.errors.lastSeen';
         <section class="card setup">
           <h2>{{ s.label }} needs read access</h2>
           <p>
-            The database login used by NAY-Monitor can't read this source:
+            The database login used by SQL Monitor can't read this source:
             <span class="mono small">{{ s.unavailableReason }}</span>
           </p>
           @if (s.id === 'agent') {

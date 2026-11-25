@@ -70,7 +70,7 @@ Promise.all([startMonitor(), discoverTargets()])
   .then(() => {
     setInterval(() => void discoverTargets(), 30 * 60_000).unref();
     startHistory();
-    app.listen(config.port, () => console.log(`[server] NAY-Monitor API listening on http://localhost:${config.port}`));
+    app.listen(config.port, () => console.log(`[server] SQL Monitor API listening on http://localhost:${config.port}`));
   })
   .catch((err) => {
     console.error('[server] failed to start', err);

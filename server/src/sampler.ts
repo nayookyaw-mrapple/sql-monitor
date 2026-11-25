@@ -1,12 +1,16 @@
 /**
- * Activity sampler: every few seconds, look at what is executing on each server in HISTORY_SERVERS (the same
- * view as "Running now") and save it to the local SQLite history. Runs all the time, viewer or not.
+ * Activity sampler: every few seconds, look at each server in HISTORY_SERVERS and save to the local SQLite history
+ *  - what is executing right now (the same view as "Running now"), and
+ *  - the last batch each connected session finished since the previous poll, which catches quick queries.
+ * Runs all the time, viewer or not. Read-only: two SELECTs on system views per poll.
  *
- * This is a SAMPLE, not an audit: a statement that starts and finishes between two polls is never seen.
+ * This is a SAMPLE, not an audit: only the newest finished batch per session is visible, and a session that
+ * connects, runs and disconnects between two polls is never seen.
  * The complete record comes from SQL Server Audit (audit.ts).
  */
+import { createHash } from 'node:crypto';
 import { config } from './config.js';
-import { readQuery } from './db.js';
+import { readQuery, sql } from './db.js';
 import { saveSamples, type SampleRow } from './history-store.js';
 import { formatDate } from './serialize.js';
 import { BACKGROUND_WAITS, jobNames, stmt, withJob } from './sqlactivity.js';
@@ -32,7 +36,7 @@ interface Raw {
 }
 
 /** The monitor's own connections (see db.ts) are left out so it doesn't log itself. */
-const OWN_APP = 'NAY-Monitor (read-only)';
+const OWN_APP = 'SQL Monitor (read-only)';
 
 const SAMPLE_SQL = `SELECT SYSDATETIME() AS now, r.session_id AS sessionId, r.start_time AS startTime,
     DB_NAME(CASE WHEN st.objectid IS NOT NULL THEN st.dbid ELSE r.database_id END) AS db, r.command,
@@ -47,6 +51,58 @@ const SAMPLE_SQL = `SELECT SYSDATETIME() AS now, r.session_id AS sessionId, r.st
   OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) st
   WHERE r.session_id <> @@SPID AND s.is_user_process = 1 AND ISNULL(s.program_name, '') <> '${OWN_APP}'
     AND ISNULL(r.wait_type, '') NOT IN (${BACKGROUND_WAITS.map((w) => `'${w}'`).join(', ')})`;
+
+interface RawLast {
+  now: Date;
+  sessionId: number;
+  lastStart: Date | null;
+  lastEnd: Date | null;
+  db: string | null;
+  procName: string | null;
+  batch: string | null;
+  loginName: string | null;
+  hostName: string | null;
+  programName: string | null;
+  clientAddress: string | null;
+}
+
+/**
+ * The last thing each connected session ran and has already finished. SQL Server keeps this per session, so a
+ * query far too quick to be "seen running" is still caught, as long as the session stays connected until the next
+ * poll (SSMS and pooled application connections do). Only the newest batch per session is available.
+ * A session with a request in flight is left to the running sample.
+ */
+const LAST_SQL = `SELECT SYSDATETIME() AS now, s.session_id AS sessionId, s.last_request_start_time AS lastStart, s.last_request_end_time AS lastEnd,
+    DB_NAME(CASE WHEN t.objectid IS NOT NULL THEN t.dbid ELSE s.database_id END) AS db,
+    CASE WHEN t.objectid IS NOT NULL THEN OBJECT_SCHEMA_NAME(t.objectid, t.dbid) + '.' + OBJECT_NAME(t.objectid, t.dbid) END AS procName,
+    CASE WHEN t.objectid IS NULL THEN LEFT(t.text, 4000) END AS batch,
+    s.login_name AS loginName, s.host_name AS hostName, s.program_name AS programName, c.client_net_address AS clientAddress
+  FROM sys.dm_exec_sessions s
+  JOIN sys.dm_exec_connections c ON c.session_id = s.session_id AND c.parent_connection_id IS NULL
+  OUTER APPLY sys.dm_exec_sql_text(c.most_recent_sql_handle) t
+  WHERE s.session_id <> @@SPID AND s.is_user_process = 1 AND ISNULL(s.program_name, '') <> '${OWN_APP}'
+    AND s.last_request_end_time >= s.last_request_start_time
+    AND NOT EXISTS (SELECT 1 FROM sys.dm_exec_requests rq WHERE rq.session_id = s.session_id)
+    AND s.last_request_end_time >= DATEADD(millisecond, -@windowMs, SYSDATETIME())`;
+
+/**
+ * Action of a whole batch, from its text. A change wins over a read ("SELECT …; UPDATE …" is an UPDATE), because
+ * who changed something is what the history is for. Text inside strings and comments is ignored.
+ */
+export function actionOfText(sqlText: string | null): string {
+  if (!sqlText) return 'OTHER';
+  const text = sqlText
+    .replace(/'(?:[^']|'')*'/g, "''")
+    .replace(/--[^\r\n]*/g, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .toUpperCase();
+  const write = /\b(INSERT|UPDATE(?!\s+STATISTICS)|DELETE|MERGE|TRUNCATE)\b/.exec(text);
+  if (write) return write[1];
+  if (/\bEXEC(UTE)?\b/.test(text)) return 'EXECUTE';
+  if (/\b(CREATE|ALTER|DROP)\s+(TABLE|PROC|PROCEDURE|VIEW|FUNCTION|INDEX|TRIGGER|SCHEMA|DATABASE|TYPE|USER|LOGIN|ROLE)\b/.test(text)) return 'DDL';
+  if (/\bSELECT\b/.test(text)) return 'SELECT';
+  return 'OTHER';
+}
 
 /** INSERT / UPDATE / DELETE / MERGE / SELECT / EXECUTE / TRUNCATE / DDL / OTHER, from SQL Server's own command name. */
 export function actionOf(command: string | null): string {
@@ -102,16 +158,72 @@ interface SamplerState {
   lastPollAt: string | null;
   lastError: string | null;
   polls: number;
+  /** When the previous poll was made (this machine's clock), to size the "finished since" window. */
+  lastPollMs: number;
+  /** Per session: start time of the newest request already saved, so it isn't saved twice. */
+  savedStart: Map<number, string>;
 }
 
 const states = new Map<string, SamplerState>();
 
 async function sampleOnce(server: string): Promise<void> {
-  const [rows, jobs] = await Promise.all([readQuery<Raw>(SAMPLE_SQL, { pool: 'master', server }), jobNames(server)]);
   const st = states.get(server)!;
+  // Look back to the previous poll plus a margin; anything already saved is skipped below.
+  const windowMs = Math.min(10 * 60_000, (st.lastPollMs ? Date.now() - st.lastPollMs : config.history.sampleMs) + 3000);
+  const pollStarted = Date.now();
+  const [rows, last, jobs] = await Promise.all([
+    readQuery<Raw>(SAMPLE_SQL, { pool: 'master', server }),
+    readQuery<RawLast>(LAST_SQL, { pool: 'master', server, params: { windowMs: { type: sql.Int, value: Math.round(windowMs) } } }),
+    jobNames(server),
+  ]);
+  st.lastPollMs = pollStarted;
   st.polls++;
   st.lastError = null;
-  st.lastPollAt = formatDate(rows[0]?.now ?? new Date());
+  st.lastPollAt = formatDate(rows[0]?.now ?? last[0]?.now ?? new Date());
+
+  // Finished requests: one row each, timed at the moment the request ended.
+  const finished: SampleRow[] = [];
+  const running = new Map(rows.map((r) => [r.sessionId, r.startTime ? formatDate(r.startTime) : null]));
+  for (const r of last) {
+    if (!r.lastStart || !r.lastEnd || (!r.batch && !r.procName)) continue;
+    const requestStart = formatDate(r.lastStart);
+    // Already saved, or the session has moved on to a new request that the running sample covers.
+    if (st.savedStart.get(r.sessionId) === requestStart || running.has(r.sessionId)) continue;
+    st.savedStart.set(r.sessionId, requestStart);
+    const endedAt = formatDate(r.lastEnd);
+    finished.push({
+      // The same batch from the same login, host and app within one clock hour is one row with a count: an application
+      // repeating a query every few seconds would otherwise add hundreds of thousands of rows a day.
+      key: [server, 'L', endedAt.slice(0, 13), createHash('sha1').update([r.loginName, r.hostName, r.programName, r.db, r.procName, r.batch].join('\u0001')).digest('hex')].join('|'),
+      capture: 'last',
+      seenAt: endedAt,
+      db: r.db,
+      sessionId: r.sessionId,
+      requestStart,
+      // A procedure called directly (RPC): only its name is known, not the statements inside it.
+      action: r.procName ? 'EXECUTE' : actionOfText(r.batch),
+      command: null,
+      procName: r.procName,
+      statement: r.batch,
+      tables: tablesIn(r.batch),
+      loginName: r.loginName,
+      hostName: r.hostName,
+      clientAddress: r.clientAddress,
+      programName: r.programName,
+      jobName: withJob({ programName: r.programName }, jobs).jobName as string | null,
+      elapsedMs: Math.max(0, r.lastEnd.getTime() - r.lastStart.getTime()),
+      cpuMs: null,
+      logicalReads: null,
+      writes: null,
+      rowsAffected: null,
+    });
+  }
+  // Forget sessions that have gone, so the map doesn't grow for ever (session ids are reused).
+  if (st.savedStart.size > 5000) st.savedStart.clear();
+  // A request seen running is saved by the running sample; remember it so its "finished" twin is skipped.
+  for (const [sessionId, start] of running) if (start) st.savedStart.set(sessionId, start);
+  saveSamples(server, finished);
+
   if (rows.length === 0) return;
   const seenAt = formatDate(rows[0].now);
   const samples: SampleRow[] = rows.map((r) => {
@@ -119,6 +231,8 @@ async function sampleOnce(server: string): Promise<void> {
     const job = withJob({ programName: r.programName }, jobs).jobName as string | null;
     return {
       key: [server, r.sessionId, requestStart, r.procName ?? '', r.stmtStart ?? 0].join('|'),
+      capture: 'running',
+      seenAt,
       db: r.db,
       sessionId: r.sessionId,
       requestStart,
@@ -139,7 +253,7 @@ async function sampleOnce(server: string): Promise<void> {
       rowsAffected: num(r.rowsAffected),
     };
   });
-  saveSamples(server, seenAt, samples);
+  saveSamples(server, samples);
 }
 
 function loop(server: string): void {
@@ -156,7 +270,7 @@ function loop(server: string): void {
 
 export function startSampler(): void {
   for (const server of config.history.servers) {
-    states.set(server, { lastPollAt: null, lastError: null, polls: 0 });
+    states.set(server, { lastPollAt: null, lastError: null, polls: 0, lastPollMs: 0, savedStart: new Map() });
     loop(server);
   }
   if (config.history.servers.length) {

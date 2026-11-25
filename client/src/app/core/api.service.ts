@@ -83,14 +83,25 @@ export class ApiService {
     return this.http.get<HistoryPage<AuditEvent>>('/api/history/audit', { params: params(query) });
   }
 
+  /** Domain logins seen in a history log, busiest first. */
+  historyLogins(kind: 'sampled' | 'audit', scope: SqlScope): Observable<{ logins: { login: string; rows: number }[] }> {
+    return this.http.get<{ logins: { login: string; rows: number }[] }>(`/api/history/${kind}/logins`, { params: params({ scope }) });
+  }
+
+  /** Every row matching the filter (up to the server's limit), for export. */
+  historyExport<T>(kind: 'sampled' | 'audit', query: Omit<HistoryQuery, 'page' | 'pageSize'>): Observable<{ rows: T[]; total: number; limit: number }> {
+    return this.http.get<{ rows: T[]; total: number; limit: number }>(`/api/history/${kind}/export`, { params: params(query) });
+  }
+
   latestChanges(
     limit = 200,
     module?: string,
     range: { from?: string; to?: string } = {},
-  ): Observable<{ monitor: MonitorStatus; rows: LatestChangeRow[]; scannedTables: number | null; elapsedMs: number }> {
-    return this.http.get<{ monitor: MonitorStatus; rows: LatestChangeRow[]; scannedTables: number | null; elapsedMs: number }>(
+    filter: { action?: string; user?: string; table?: string } = {},
+  ): Observable<{ monitor: MonitorStatus; rows: LatestChangeRow[]; scannedTables: number | null; perTable?: number; elapsedMs: number }> {
+    return this.http.get<{ monitor: MonitorStatus; rows: LatestChangeRow[]; scannedTables: number | null; perTable?: number; elapsedMs: number }>(
       '/api/latest-changes',
-      { params: params({ limit, module, from: range.from, to: range.to }) },
+      { params: params({ limit, module, from: range.from, to: range.to, ...filter }) },
     );
   }
 }

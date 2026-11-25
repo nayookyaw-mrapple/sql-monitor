@@ -398,6 +398,8 @@ export interface SampledActivity {
   logicalReads: number | null;
   writes: number | null;
   rowsAffected: number | null;
+  /** running = seen while executing; last = the session's last finished batch, picked up afterwards. */
+  capture: 'running' | 'last';
 }
 
 /** One SQL Server Audit record. */
@@ -435,6 +437,15 @@ export interface HistoryQuery {
   to?: string;
   action?: string;
   search?: string;
+  /** Text to find in the Who columns only. */
+  who?: string;
+  whoType?: 'agent' | 'user' | 'maui' | 'other';
+  /** Only this login. */
+  login?: string;
+  /** Leave this login out. */
+  notLogin?: string;
+  /** Sampled log only: how the row was captured. */
+  capture?: 'running' | 'last';
   page: number;
   pageSize: number;
 }
