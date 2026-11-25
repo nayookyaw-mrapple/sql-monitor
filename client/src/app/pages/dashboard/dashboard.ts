@@ -1,11 +1,13 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, DestroyRef, effect, inject, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ApiService, errorMessage } from '../../core/api.service';
 import { ContextService } from '../../core/context.service';
 import { ActivityEvent, MODULE_NAMES, Summary } from '../../core/models';
 import { AutoRefresh } from '../../shared/auto-refresh';
 import { AgoPipe, CompactPipe } from '../../shared/format';
+
+const ORDER_KEY = 'nay-monitor.dashboard.order';
 
 @Component({
   selector: 'app-dashboard',
@@ -53,19 +55,25 @@ import { AgoPipe, CompactPipe } from '../../shared/format';
       <div class="grid-2">
         <section class="card">
           <div class="card-head">
-            <h2>Recently changed tables</h2>
-            <a routerLink="/latest-changes">See all changes →</a>
+            <h2>{{ order() === 'newest' ? 'Recently changed tables' : 'Longest unchanged tables' }}</h2>
+            <div class="card-tools">
+              <div class="seg" role="group" aria-label="Order">
+                <button type="button" [class.active]="order() === 'newest'" (click)="setOrder('newest')">Newest first</button>
+                <button type="button" [class.active]="order() === 'oldest'" (click)="setOrder('oldest')">Oldest first</button>
+              </div>
+              <a routerLink="/latest-changes">See all changes →</a>
+            </div>
           </div>
           @if (s.monitor.lastChangeScanRunning) {
             <p class="muted small">Scanning tables for this site and season… ({{ s.monitor.lastChangeScannedTables }} done)</p>
           }
-          @if (s.recentlyChangedTables.length) {
+          @if (changedTables().length) {
             <table class="list">
               <thead>
                 <tr><th>Table</th><th>Last change</th><th class="num">Rows</th></tr>
               </thead>
               <tbody>
-                @for (t of s.recentlyChangedTables; track t.fullName) {
+                @for (t of changedTables(); track t.fullName) {
                   <tr>
                     <td>
                       <a [routerLink]="['/tables', t.fullName]">{{ t.name }}</a>
@@ -81,6 +89,8 @@ import { AgoPipe, CompactPipe } from '../../shared/format';
             <p class="muted">No changes found for this site and season.</p>
           }
           <p class="muted small">
+            Showing the {{ changedTables().length }} {{ order() === 'newest' ? 'most recently changed' : 'longest unchanged' }} of
+            {{ s.changedTableCount | number }} tables with a known last change.
             Covers tables up to {{ s.monitor.lastChangeScanMaxRows | compact }} rows. The {{ s.largeTableCount }} larger tables show up in
             <a routerLink="/activity">Live activity</a>.
           </p>
@@ -138,6 +148,13 @@ export class Dashboard {
   protected readonly events = signal<ActivityEvent[]>([]);
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
+  /** Which end of the "last change" list to show; remembered between visits. */
+  protected readonly order = signal<'newest' | 'oldest'>(this.storedOrder());
+  protected readonly changedTables = computed(() => {
+    const s = this.summary();
+    if (!s) return [];
+    return this.order() === 'oldest' ? (s.oldestChangedTables ?? []) : s.recentlyChangedTables;
+  });
 
   constructor() {
     effect(() => {
@@ -149,6 +166,23 @@ export class Dashboard {
 
   protected readonly updatedAt = signal<Date | null>(null);
   private scanTimer: ReturnType<typeof setTimeout> | undefined;
+
+  protected setOrder(order: 'newest' | 'oldest'): void {
+    this.order.set(order);
+    try {
+      localStorage.setItem(ORDER_KEY, order);
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
+  private storedOrder(): 'newest' | 'oldest' {
+    try {
+      return localStorage.getItem(ORDER_KEY) === 'oldest' ? 'oldest' : 'newest';
+    } catch {
+      return 'newest';
+    }
+  }
 
   protected moduleName(code: string): string {
     return MODULE_NAMES[code] ?? code.toUpperCase();

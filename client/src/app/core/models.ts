@@ -120,6 +120,10 @@ export interface Summary {
   largeTableCount: number;
   modules: ModuleSummary[];
   recentlyChangedTables: TableSummary[];
+  /** Tables whose last change is longest ago, oldest first. */
+  oldestChangedTables: TableSummary[];
+  /** Tables with a known last change for this site and season. */
+  changedTableCount: number;
   monitor: MonitorStatus;
 }
 

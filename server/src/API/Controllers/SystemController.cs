@@ -53,7 +53,7 @@ namespace API.Controllers
         public IActionResult Targets() =>
             Ok(new { targets = _targets.Known, servers = _discovery.Status, @default = _targets.Default.Id, active = _monitor.ActiveTargets() });
 
-        /// <summary>Totals, modules and recently changed tables for the dashboard.</summary>
+        /// <summary>Totals, modules and the most and least recently changed tables for the dashboard.</summary>
         [HttpGetOrHead("summary")]
         public async Task<IActionResult> Summary()
         {
@@ -64,12 +64,14 @@ namespace API.Controllers
                 .Select(g => new { module = g.Key, tables = g.Count(), rows = g.Sum(t => t.RowCount) })
                 .OrderBy(m => m.module, Js.TextOrder)
                 .ToList();
-            var recent = tables
+            var changed = tables
                 .Select(t => _summaries.Of(t, ctx))
                 .Where(t => !string.IsNullOrEmpty(t.LastChange))
                 .OrderByDescending(t => t.LastChange ?? "", Js.TextOrder)
-                .Take(15)
                 .ToList();
+            var recent = changed.Take(15).ToList();
+            // The other end of the same list: tables whose last change is longest ago.
+            var oldest = changed.AsEnumerable().Reverse().Take(15).ToList();
             var target = _targets.Current;
             return Ok(new
             {
@@ -87,6 +89,8 @@ namespace API.Controllers
                 largeTableCount = tables.Count(t => t.RowCount >= _config.LargeTableRows),
                 modules,
                 recentlyChangedTables = recent,
+                oldestChangedTables = oldest,
+                changedTableCount = changed.Count,
                 monitor = _monitor.Status(ctx),
             });
         }

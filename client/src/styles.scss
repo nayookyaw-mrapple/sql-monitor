@@ -1686,3 +1686,39 @@ a.btn {
   overflow-wrap: anywhere;
   line-height: 1.45;
 }
+
+/* ---------- Card header tools (segmented choice + link) ---------- */
+
+.card-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  button {
+    font: inherit;
+    font-size: 12.5px;
+    padding: 4px 10px;
+    border: 0;
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    &:first-child {
+      border-left: 0;
+    }
+    &:hover {
+      background: var(--row-hover);
+    }
+    &.active {
+      background: var(--accent);
+      color: #fff;
+    }
+  }
+}
