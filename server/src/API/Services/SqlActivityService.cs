@@ -430,7 +430,17 @@ namespace API.Services
                 };
             }).ToList();
 
-            return new { database = target.Database, server = target.Server, historyOn, serverStart, rows = procs };
+            return new
+            {
+                database = target.Database,
+                server = target.Server,
+                historyOn,
+                // How far back "used by" can go: rows older than the retention are deleted.
+                retentionDays = _config.History.RetentionDays,
+                historySince = _history.SampledSince(target.Server.ToUpperInvariant()),
+                serverStart,
+                rows = procs,
+            };
         }
     }
 }

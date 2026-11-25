@@ -72,6 +72,17 @@ const RUNS_SHOWN = 15;
           <button type="button" class="btn" (click)="copy(grantScript())">{{ copied() ? '✓ Copied' : 'Copy script' }}</button>
         </section>
       } @else {
+        <div class="retention">
+          <span class="retention-tag">Data retention</span>
+          <span>
+            @if (d.historySince) {
+              Run history on this server goes back to <strong>{{ d.historySince.slice(0, 10) }}</strong>
+              ({{ d.historyRows | number }} rows).
+            }
+            SQL Server Agent keeps a fixed number of history rows, not a number of days, so busy jobs lose their older runs sooner.
+          </span>
+        </div>
+
         <div class="stats">
           <button type="button" class="stat stat-btn" [class.active]="filter() === 'all'" (click)="filter.set('all')">
             <div class="stat-label">Jobs</div>

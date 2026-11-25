@@ -687,6 +687,15 @@ namespace API.Services
             }
         }
 
+        /// <summary>When the oldest row still kept in the sampled log of a server was saved, or null when it is empty.</summary>
+        public string? SampledSince(string server)
+        {
+            lock (_sync)
+            {
+                return Get(Open(), "SELECT MIN(first_seen) AS oldest FROM sampled_activity WHERE server = ?", server)?["oldest"] as string;
+            }
+        }
+
         /// <summary>Row counts and oldest row per log, for the status line.</summary>
         public object HistoryTotals(string server)
         {

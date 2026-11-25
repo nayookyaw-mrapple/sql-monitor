@@ -1738,3 +1738,28 @@ a.btn {
     font-size: 13.5px;
   }
 }
+
+/* ---------- "Data retention" note under a page title ---------- */
+
+.retention {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  background: var(--info-bg);
+  color: var(--info-text);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+.retention-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--info-text);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}

@@ -402,6 +402,10 @@ export interface ProcUsageResult {
   server: string;
   /** The activity history is recording this server. */
   historyOn: boolean;
+  /** Days the activity history is kept before rows are deleted. */
+  retentionDays: number;
+  /** When the oldest row still kept for this server was saved. */
+  historySince: string | null;
   /** When SQL Server last started (its own last-run times start again from here). */
   serverStart: string | null;
   rows: ProcUsage[];
@@ -554,6 +558,9 @@ export interface AgentJobs {
   reason: string | null;
   /** Category, running now and next run could be read. */
   extras: boolean;
+  /** Date of the oldest run SQL Server Agent still keeps, and how many history rows it holds. */
+  historySince?: string | null;
+  historyRows?: number;
   jobs: AgentJob[];
 }
 

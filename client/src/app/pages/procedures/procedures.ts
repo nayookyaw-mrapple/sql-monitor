@@ -32,6 +32,20 @@ const VIEW_KEY = 'nay-monitor.procedures.view';
       <div class="banner error">{{ e }}</div>
     }
 
+    @if (data(); as d) {
+      @if (d.historyOn) {
+        <div class="retention">
+          <span class="retention-tag">Data retention</span>
+          <span>
+            <strong>{{ d.retentionDays }} days.</strong> Who used a procedure is kept for {{ d.retentionDays }} days, then deleted
+            @if (d.historySince) {
+              · recording on this server since <strong>{{ d.historySince.slice(0, 16) }}</strong>
+            }
+          </span>
+        </div>
+      }
+    }
+
     <div class="stats">
       <div class="stat">
         <div class="stat-label">Stored procedures</div>

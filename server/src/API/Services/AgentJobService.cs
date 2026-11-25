@@ -154,7 +154,23 @@ namespace API.Services
                 };
             }).ToList();
 
-            object data = new { server, available = true, reason = (string?)null, extras = hasExtras, jobs };
+            // How far back the run history goes: SQL Server Agent keeps a number of rows, not a number of days.
+            string? historySince = null;
+            long historyRows = 0;
+            try
+            {
+                var kept = await _db.ReadQueryAsync(
+                    "SELECT MIN(CONVERT(datetime, CONVERT(char(8), h.run_date))) AS oldest, COUNT(*) AS n FROM msdb.dbo.sysjobhistory h WHERE h.run_date > 0",
+                    new QueryOptions { Pool = PoolName.Msdb, Dirty = true, Signal = signal });
+                historySince = Js.Text(Serialize.Value(kept.FirstOrDefault()?["oldest"]));
+                historyRows = Js.ToLong(kept.FirstOrDefault()?["n"]);
+            }
+            catch (Exception err) when (err is not CancelledError)
+            {
+                /* shown as unknown */
+            }
+
+            object data = new { server, available = true, reason = (string?)null, extras = hasExtras, historySince, historyRows, jobs };
             _cache[server] = (Js.NowMs(), data);
             return data;
         }
