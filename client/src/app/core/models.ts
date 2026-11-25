@@ -400,6 +400,8 @@ export interface SampledActivity {
   rowsAffected: number | null;
   /** running = seen while executing; last = the session's last finished batch, picked up afterwards. */
   capture: 'running' | 'last';
+  /** The application it came from: service name (from the pod name), "SQL Agent", or the client's application name. */
+  app: string | null;
 }
 
 /** One SQL Server Audit record. */
@@ -421,6 +423,8 @@ export interface AuditEvent {
   clientIp: string | null;
   programName: string | null;
   statement: string | null;
+  /** The application it came from: service name (from the pod name), "SQL Agent", or the client's application name. */
+  app: string | null;
 }
 
 export interface HistoryPage<T> {
@@ -444,6 +448,8 @@ export interface HistoryQuery {
   login?: string;
   /** Leave this login out. */
   notLogin?: string;
+  /** Only this application (exact). */
+  app?: string;
   /** Sampled log only: how the row was captured. */
   capture?: 'running' | 'last';
   page: number;

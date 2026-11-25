@@ -68,6 +68,51 @@ export interface AuditRow {
 
 let handle: DatabaseSync | null = null;
 
+/** A Kubernetes pod name: <service>-<replica set hash>-<pod id>, e.g. transfer-api-58b56785cc-hn82t. */
+const POD_HOST = /^([a-z0-9][a-z0-9.-]*?)-[a-z0-9]{6,10}-[a-z0-9]{5}$/;
+
+/**
+ * The application a connection came from, for the App column and filter:
+ *  - a service running in Kubernetes: the service name, taken from the pod name it connected from (the pod
+ *    id changes on every deploy, the service name does not);
+ *  - a SQL Agent job step: "SQL Agent";
+ *  - a client that sends its settings as the application name ("SiteID=2&App=CARLA"): the App value, so
+ *    the same program at different sites counts as one application;
+ *  - anything else: the application name the client gave SQL Server.
+ */
+export function appName(p: { programName: string | null; hostName: string | null; loginName: string | null }): string | null {
+  const program = p.programName?.trim() ?? '';
+  if (/^SQLAgent/i.test(program) || /SQLSERVERAGENT/i.test(p.loginName ?? '')) return 'SQL Agent';
+  const pod = POD_HOST.exec(p.hostName?.trim() ?? '');
+  if (pod) return pod[1];
+  const named = /(?:^|&)App=([^&]+)/i.exec(program);
+  if (named) return named[1].trim() || program;
+  return program || null;
+}
+
+/**
+ * Add the app column to a table created before it existed, and fill it in for rows saved without one.
+ * Safe to run on every start: an interrupted first run is simply finished by the next one.
+ */
+function addAppColumn(d: DatabaseSync, table: string): void {
+  const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === 'app')) d.exec(`ALTER TABLE ${table} ADD COLUMN app TEXT`);
+  const combos = d
+    .prepare(`SELECT DISTINCT program_name AS programName, host_name AS hostName, login_name AS loginName FROM ${table} WHERE app IS NULL`)
+    .all() as { programName: string | null; hostName: string | null; loginName: string | null }[];
+  const todo = combos.map((c) => ({ ...c, app: appName(c) })).filter((c) => c.app !== null);
+  if (todo.length === 0) return;
+  const set = d.prepare(`UPDATE ${table} SET app = ? WHERE app IS NULL AND program_name IS ? AND host_name IS ? AND login_name IS ?`);
+  d.exec('BEGIN');
+  try {
+    for (const c of todo) set.run(c.app, c.programName, c.hostName, c.loginName);
+    d.exec('COMMIT');
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 export function historyDbPath(): string {
   const serverDir = join(dirname(fileURLToPath(import.meta.url)), '..');
   return isAbsolute(config.history.dbPath) ? config.history.dbPath : join(serverDir, config.history.dbPath);
@@ -139,6 +184,9 @@ function db(): DatabaseSync {
   // Added after the first release: how the row was captured.
   const cols = d.prepare('PRAGMA table_info(sampled_activity)').all() as { name: string }[];
   if (!cols.some((c) => c.name === 'capture')) d.exec("ALTER TABLE sampled_activity ADD COLUMN capture TEXT NOT NULL DEFAULT 'running'");
+  // Added later: the application each row came from.
+  addAppColumn(d, 'sampled_activity');
+  addAppColumn(d, 'audit_event');
   handle = d;
   return d;
 }
@@ -162,8 +210,8 @@ export function saveSamples(server: string, rows: SampleRow[]): void {
   if (rows.length === 0) return;
   const st = db().prepare(
     `INSERT INTO sampled_activity (key, server, db, session_id, request_start, first_seen, last_seen, action, command, proc_name, statement,
-       tables, login_name, host_name, client_address, program_name, job_name, elapsed_ms, cpu_ms, logical_reads, writes, rows_affected, capture)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       tables, login_name, host_name, client_address, program_name, job_name, elapsed_ms, cpu_ms, logical_reads, writes, rows_affected, capture, app)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (key) DO UPDATE SET last_seen = excluded.last_seen, samples = samples + 1, elapsed_ms = excluded.elapsed_ms,
        cpu_ms = excluded.cpu_ms, logical_reads = excluded.logical_reads, writes = excluded.writes, rows_affected = excluded.rows_affected`,
   );
@@ -171,7 +219,7 @@ export function saveSamples(server: string, rows: SampleRow[]): void {
     for (const r of rows) {
       st.run(
         r.key, server, r.db, r.sessionId, r.requestStart, r.seenAt, r.seenAt, r.action, r.command, r.procName, r.statement,
-        r.tables, r.loginName, r.hostName, r.clientAddress, r.programName, r.jobName, r.elapsedMs, r.cpuMs, r.logicalReads, r.writes, r.rowsAffected, r.capture,
+        r.tables, r.loginName, r.hostName, r.clientAddress, r.programName, r.jobName, r.elapsedMs, r.cpuMs, r.logicalReads, r.writes, r.rowsAffected, r.capture, appName(r),
       );
     }
   });
@@ -182,8 +230,8 @@ export function saveAuditEvents(server: string, rows: AuditRow[]): number {
   if (rows.length === 0) return 0;
   const st = db().prepare(
     `INSERT OR IGNORE INTO audit_event (dedupe, server, event_time, action, action_id, succeeded, session_id, db, schema_name, object_name,
-       class_type, login_name, session_login, db_user, host_name, client_ip, program_name, statement)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       class_type, login_name, session_login, db_user, host_name, client_ip, program_name, statement, app)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   return inTransaction(() => {
     let added = 0;
@@ -193,7 +241,7 @@ export function saveAuditEvents(server: string, rows: AuditRow[]): number {
         .digest();
       const res = st.run(
         dedupe, server, r.eventTime, r.action, r.actionId, r.succeeded ? 1 : 0, r.sessionId, r.db, r.schemaName, r.objectName,
-        r.classType, r.loginName, r.sessionLogin, r.dbUser, r.hostName, r.clientIp, r.programName, r.statement,
+        r.classType, r.loginName, r.sessionLogin, r.dbUser, r.hostName, r.clientIp, r.programName, r.statement, appName(r),
       );
       added += Number(res.changes);
     }
@@ -244,6 +292,8 @@ export interface HistoryFilter {
   login?: string;
   /** Leave this login out, e.g. a label printer account that runs every few seconds. */
   notLogin?: string;
+  /** Only this application (exact, case-insensitive), as worked out by appName(). */
+  app?: string;
   /** Sampled log only: how the row was captured. */
   capture?: 'running' | 'last';
   page: number;
@@ -306,6 +356,10 @@ function page(table: string, timeCol: string, searchCols: string[], whoCols: str
     where.push("COALESCE(login_name, '') <> ? COLLATE NOCASE");
     params.push(f.notLogin);
   }
+  if (f.app) {
+    where.push('app = ? COLLATE NOCASE');
+    params.push(f.app);
+  }
   const whereSql = where.join(' AND ');
   const total = Number((db().prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${whereSql}`).get(...params) as { n: number }).n);
   const rows = db()
@@ -323,7 +377,7 @@ export function querySampled(f: HistoryFilter) {
     `id, db, session_id AS sessionId, request_start AS requestStart, first_seen AS firstSeen, last_seen AS lastSeen, samples, action, command,
      proc_name AS procName, statement, tables, login_name AS loginName, host_name AS hostName, client_address AS clientAddress,
      program_name AS programName, job_name AS jobName, elapsed_ms AS elapsedMs, cpu_ms AS cpuMs, logical_reads AS logicalReads,
-     writes, rows_affected AS rowsAffected, capture`,
+     writes, rows_affected AS rowsAffected, capture, app`,
     f,
   );
 }
@@ -336,7 +390,7 @@ export function queryAudit(f: HistoryFilter) {
     ['login_name', 'session_login', 'db_user', 'host_name', 'client_ip', 'program_name'],
     `id, event_time AS eventTime, action, action_id AS actionId, succeeded, session_id AS sessionId, db, schema_name AS schemaName,
      object_name AS objectName, class_type AS classType, login_name AS loginName, session_login AS sessionLogin, db_user AS dbUser,
-     host_name AS hostName, client_ip AS clientIp, program_name AS programName, statement`,
+     host_name AS hostName, client_ip AS clientIp, program_name AS programName, statement, app`,
     f,
   );
   return { ...r, rows: r.rows.map((x) => ({ ...x, succeeded: x.succeeded === 1 })) };
@@ -355,6 +409,21 @@ export function domainLogins(kind: 'sampled' | 'audit', server: string, dbName?:
     )
     .all(...params)
     .map((r) => ({ login: String(r.login), rows: Number(r.rows) }));
+}
+
+/** The applications seen in a log, busiest first, for the app dropdown. */
+export function historyApps(kind: 'sampled' | 'audit', server: string, dbName?: string): { app: string; rows: number }[] {
+  const table = kind === 'sampled' ? 'sampled_activity' : 'audit_event';
+  const params: Value[] = [server];
+  if (dbName) params.push(dbName);
+  return db()
+    .prepare(
+      `SELECT app, COUNT(*) AS rows FROM ${table}
+       WHERE server = ? ${dbName ? 'AND db = ? COLLATE NOCASE' : ''} AND app IS NOT NULL
+       GROUP BY app COLLATE NOCASE ORDER BY COUNT(*) DESC, app LIMIT 300`,
+    )
+    .all(...params)
+    .map((r) => ({ app: String(r.app), rows: Number(r.rows) }));
 }
 
 /** Row counts and oldest row per log, for the status line. */

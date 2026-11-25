@@ -121,6 +121,12 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
           }
         </optgroup>
       </select>
+      <select [value]="app()" (change)="app.set($any($event.target).value); page.set(1)" aria-label="App" title="Show only one application: a service (from its pod name), SQL Agent, or a client program">
+        <option value="" [selected]="app() === ''">All apps</option>
+        @for (a of apps(); track a.app) {
+          <option [value]="a.app" [selected]="app() === a.app">{{ a.app }} ({{ a.rows | number }})</option>
+        }
+      </select>
       @if (kind() === 'sampled') {
         <select [value]="capture()" (change)="capture.set($any($event.target).value); page.set(1)" aria-label="How it was captured" title="Seen running = caught while executing. After it finished = a quick query picked up from the session afterwards.">
           <option value="" [selected]="capture() === ''">Running + finished</option>
@@ -141,6 +147,7 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
               <th>When</th>
               <th>Action</th>
               <th>Who</th>
+              <th>App</th>
               @if (kind() === 'sampled') {
                 <th>Procedure / statement</th>
                 <th>Tables (best effort)</th>
@@ -169,6 +176,7 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
                     <div class="who-login ellipsis">{{ r.loginName }}{{ r.hostName ? ' @ ' + r.hostName : '' }}</div>
                     <div class="muted small ellipsis">{{ r.jobName ? 'Agent job: ' + r.jobName : r.programName }}</div>
                   </td>
+                  <td class="app" [title]="r.app ?? ''">{{ r.app ?? '—' }}</td>
                   <td class="stmt">
                     @if (r.procName) {
                       <div class="proc">{{ r.procName }}</div>
@@ -196,6 +204,7 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
                     <div class="who-login ellipsis">{{ r.loginName ?? r.sessionLogin }}</div>
                     <div class="muted small ellipsis">{{ auditFrom(r) }}</div>
                   </td>
+                  <td class="app" [title]="r.app ?? ''">{{ r.app ?? '—' }}</td>
                   <td class="mono small">{{ objectLabel(r) }}</td>
                   <td class="stmt"><div class="clamp mono small">{{ oneLine(r.statement) }}</div></td>
                   <td>{{ r.db }}</td>
@@ -204,7 +213,7 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
             }
             @if (total() === 0) {
               <tr>
-                <td [attr.colspan]="kind() === 'sampled' ? 7 : 6" class="empty">{{ loading() ? 'Loading…' : 'Nothing recorded for this filter.' }}</td>
+                <td [attr.colspan]="kind() === 'sampled' ? 8 : 7" class="empty">{{ loading() ? 'Loading…' : 'Nothing recorded for this filter.' }}</td>
               </tr>
             }
           </tbody>
@@ -271,8 +280,15 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
             <dd>When it was first seen running, or when it finished. Times are the SQL Server's local time.</dd>
             <dt>Who</dt>
             <dd>
-              First line: the application, or the SQL Agent job name. Second line: the login, then &#64; the computer it connected from. For
-              applications and jobs the login is a shared service account, not a person.
+              First line: the login, then &#64; the computer it connected from. Second line: the application name the client gave, or the SQL
+              Agent job name. For applications and jobs the login is a shared service account, not a person.
+            </dd>
+            <dt>App</dt>
+            <dd>
+              Which application the row came from. For a service running in Kubernetes it is the service name, taken from the pod it
+              connected from: <span class="mono">transfer-api-58b56785cc-hn82t</span> becomes <span class="mono">transfer-api</span>, so the
+              name stays the same across deploys. Agent job steps show <strong>SQL Agent</strong>. Anything else shows the application
+              name the program gave SQL Server, which is only as good as what that program sends.
             </dd>
             <dt>Procedure / statement</dt>
             <dd>
@@ -300,6 +316,8 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
             </dd>
             <dt>All domain users</dt>
             <dd>Pick one domain login to see only that person, or "Everyone except…" to hide a busy account such as a label printer.</dd>
+            <dt>All apps</dt>
+            <dd>Pick one application to see only what it ran. The number is how many saved rows it has.</dd>
             <dt>Running + finished</dt>
             <dd>Show only rows seen running, or only rows captured after they finished.</dd>
           </dl>
@@ -337,6 +355,11 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
               First line: the login. Second line: the computer, IP address and application, where the SQL Server version records them. For
               applications and jobs the login is a shared service account, not a person.
             </dd>
+            <dt>App</dt>
+            <dd>
+              Which application the record came from: the service name (taken from the pod it connected from), <strong>SQL Agent</strong>, or
+              the application name the program gave. Empty when the SQL Server version does not record the computer and application.
+            </dd>
             <dt>Table / procedure</dt>
             <dd>The object the action was on. This comes from SQL Server itself, so it is exact.</dd>
             <dt>Statement</dt>
@@ -354,6 +377,8 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
             </dd>
             <dt>All domain users</dt>
             <dd>Pick one domain login to see only that person, or "Everyone except…" to hide a busy account.</dd>
+            <dt>All apps</dt>
+            <dd>Pick one application to see only what it ran. The number is how many saved rows it has.</dd>
           </dl>
 
           <h3>What it does not show</h3>
@@ -393,6 +418,7 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
               <dt>Request at last sighting: ran for / CPU / reads / writes / rows</dt>
               <dd>{{ fmt(s.row.elapsedMs) }} · {{ fmt(s.row.cpuMs) }} · {{ s.row.logicalReads | number }} · {{ s.row.writes | number }} · {{ s.row.rowsAffected | number }}</dd>
             }
+            <dt>App</dt><dd>{{ s.row.app ?? '—' }}</dd>
             <dt>Who</dt>
             <dd>{{ s.row.jobName ? 'Agent job: ' + s.row.jobName + '\n' : '' }}{{ s.row.programName }}
 {{ s.row.loginName }}{{ s.row.hostName ? ' @ ' + s.row.hostName : '' }}{{ s.row.clientAddress ? ' (' + s.row.clientAddress + ')' : '' }} · session {{ s.row.sessionId }}</dd>
@@ -406,6 +432,7 @@ type Selected = { kind: 'sampled'; row: SampledActivity } | { kind: 'audit'; row
             <dt>Result</dt><dd>{{ s.row.succeeded ? 'Allowed' : 'Denied / failed permission check' }}</dd>
             <dt>Login</dt>
             <dd>{{ s.row.loginName ?? '—' }}{{ s.row.sessionLogin && s.row.sessionLogin !== s.row.loginName ? ' (session login ' + s.row.sessionLogin + ')' : '' }} · database user {{ s.row.dbUser ?? '—' }}</dd>
+            <dt>App</dt><dd>{{ s.row.app ?? '—' }}</dd>
             <dt>From</dt><dd>{{ auditFrom(s.row) || '—' }} · session {{ s.row.sessionId }}</dd>
             <dt>Statement</dt><dd class="sql">{{ s.row.statement }}</dd>
           </dl>
@@ -448,6 +475,9 @@ export class SqlHistory {
   protected readonly loginChoice = signal('');
   protected readonly capture = signal<'' | 'running' | 'last'>('');
   protected readonly logins = signal<{ login: string; rows: number }[]>([]);
+  /** App dropdown: '' = all, otherwise exactly that application. */
+  protected readonly app = signal('');
+  protected readonly apps = signal<{ app: string; rows: number }[]>([]);
   private readonly loginFilter = computed(() => {
     const c = this.loginChoice();
     return { login: c.startsWith('only:') ? c.slice(5) : undefined, notLogin: c.startsWith('not:') ? c.slice(4) : undefined };
@@ -479,6 +509,7 @@ export class SqlHistory {
         this.page.set(1);
         this.action.set('');
         this.loginChoice.set('');
+        this.app.set('');
         this.selected.set(null);
         this.sampled.set([]);
         this.audit.set([]);
@@ -495,6 +526,7 @@ export class SqlHistory {
         who: this.who().trim() || undefined,
         whoType: this.whoType() || undefined,
         ...this.loginFilter(),
+        app: this.app() || undefined,
         capture: this.capture() || undefined,
         page: this.page(),
         pageSize: this.pageSize(),
@@ -511,6 +543,7 @@ export class SqlHistory {
     this.loading.set(true);
     this.api.historyStatus().subscribe({ next: (s) => id === this.requestId && this.status.set(s), error: () => undefined });
     this.api.historyLogins(kind, query.scope).subscribe({ next: (r) => id === this.requestId && this.logins.set(r.logins), error: () => undefined });
+    this.api.historyApps(kind, query.scope).subscribe({ next: (r) => id === this.requestId && this.apps.set(r.apps), error: () => undefined });
     const done = (total: number) => {
       this.total.set(total);
       this.error.set(null);
@@ -553,6 +586,7 @@ export class SqlHistory {
       who: this.who().trim() || undefined,
       whoType: this.whoType() || undefined,
       ...this.loginFilter(),
+      app: this.app() || undefined,
       capture: this.capture() || undefined,
     };
     const target = this.ctx.target();
@@ -572,6 +606,7 @@ export class SqlHistory {
     if (query.whoType) details.push(['Login type', loginTypes[query.whoType]]);
     if (query.login) details.push(['Login', query.login]);
     if (query.notLogin) details.push(['Excluding login', query.notLogin]);
+    if (query.app) details.push(['App', query.app]);
     if (query.capture) details.push(['Captured', query.capture === 'last' ? 'After it finished' : 'While running']);
     const now = new Date();
     const p = (n: number) => String(n).padStart(2, '0');

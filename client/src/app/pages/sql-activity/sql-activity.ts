@@ -94,13 +94,13 @@ function bytes(n: number | null | undefined): string {
     </div>
 
     <div class="tabs">
+      <button type="button" [class.active]="tab() === 'history'" (click)="setTab('history')">History (sampled)</button>
       <button type="button" [class.active]="tab() === 'running'" (click)="setTab('running')">Running now ({{ live()?.running?.length ?? 0 }})</button>
       <button type="button" [class.active]="tab() === 'locks'" (click)="setTab('locks')">
         Blocking &amp; locks{{ blockedCount() ? ' (' + blockedCount() + ' blocked)' : '' }}
       </button>
       <button type="button" [class.active]="tab() === 'deadlocks'" (click)="setTab('deadlocks')">Deadlocks ({{ deadlockRows().length }})</button>
       <button type="button" [class.active]="tab() === 'procs'" (click)="setTab('procs')">Procedure stats</button>
-      <button type="button" [class.active]="tab() === 'history'" (click)="setTab('history')">History (sampled)</button>
       <button type="button" [class.active]="tab() === 'audit'" (click)="setTab('audit')">Audit history</button>
     </div>
 
@@ -629,7 +629,7 @@ export class SqlActivity {
   protected readonly ctx = inject(ContextService);
 
   protected readonly scope = signal<SqlScope>(this.readStored(SCOPE_KEY) === 'server' ? 'server' : 'db');
-  protected readonly tab = signal<Tab>((['running', 'locks', 'deadlocks', 'procs', 'history', 'audit'] as Tab[]).find((t) => t === this.readStored(TAB_KEY)) ?? 'running');
+  protected readonly tab = signal<Tab>((['running', 'locks', 'deadlocks', 'procs', 'history', 'audit'] as Tab[]).find((t) => t === this.readStored(TAB_KEY)) ?? 'history');
   protected readonly background = signal(false);
 
   protected readonly live = signal<SqlLive | null>(null);

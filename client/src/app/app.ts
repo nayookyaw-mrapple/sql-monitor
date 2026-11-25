@@ -81,6 +81,35 @@ import { MODULE_NAMES, ModuleSummary } from './core/models';
                   }
                 </select>
               </label>
+              <div class="ctx-note-wrap">
+                <button
+                  type="button"
+                  class="btn info-btn"
+                  (click)="ctxNote.set(!ctxNote())"
+                  [attr.aria-expanded]="ctxNote()"
+                  title="Which pages use Site and Season"
+                  aria-label="Which pages use Site and Season"
+                >ⓘ</button>
+                @if (ctxNote()) {
+                  <div class="ctx-note-backdrop" (click)="ctxNote.set(false)"></div>
+                  <div class="ctx-note" role="note">
+                    <strong>What Site and Season do</strong>
+                    <p>
+                      This database uses row-level security: many tables only return the rows of one site and season. These two boxes choose
+                      which.
+                    </p>
+                    <dl>
+                      <dt>Uses Site and Season</dt>
+                      <dd>Dashboard, Latest changes, Live activity, History tables, the table viewer and the module pages.</dd>
+                      <dt>Errors</dt>
+                      <dd>Most error sources follow Season; a few follow Site as well. Server-wide sources ignore both.</dd>
+                      <dt>Ignores both</dt>
+                      <dd>SQL activity (Running now, Blocking &amp; locks, Deadlocks, Procedure stats, History, Audit history). It shows the whole server or database.</dd>
+                    </dl>
+                    <p class="muted">Tables without row-level security show all sites and seasons whatever is chosen here.</p>
+                  </div>
+                }
+              </div>
               } @else {
                 <span class="muted small" title="This database has no row-level security, so all sites and seasons are shown">
                   All sites &amp; seasons
@@ -112,6 +141,8 @@ export class App {
   protected readonly modules = signal<ModuleSummary[]>([]);
   protected readonly dbName = signal('Connecting…');
   protected readonly navOpen = signal(false);
+  /** The note explaining which pages use Site and Season is open. */
+  protected readonly ctxNote = signal(false);
 
   protected readonly errors24h = signal(0);
   protected readonly login = signal('');

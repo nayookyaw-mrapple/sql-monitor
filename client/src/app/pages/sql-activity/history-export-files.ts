@@ -34,6 +34,7 @@ export const SAMPLED_EXCEL: ExportColumn<SampledActivity>[] = [
   { header: 'Last seen', width: 23, value: (r) => r.lastSeen },
   { header: 'Times seen', width: 11, value: (r) => r.samples, numeric: true },
   { header: 'Action', width: 10, value: (r) => r.action },
+  { header: 'App', width: 30, value: (r) => r.app },
   { header: 'Login', width: 28, value: (r) => r.loginName },
   { header: 'Host', width: 22, value: (r) => r.hostName },
   { header: 'Client address', width: 16, value: (r) => r.clientAddress },
@@ -56,6 +57,7 @@ export const AUDIT_EXCEL: ExportColumn<AuditEvent>[] = [
   { header: 'When', width: 23, value: (r) => r.eventTime },
   { header: 'Action', width: 10, value: (r) => r.action },
   { header: 'Result', width: 10, value: (r) => (r.succeeded ? 'Allowed' : 'Denied') },
+  { header: 'App', width: 30, value: (r) => r.app },
   { header: 'Login', width: 28, value: (r) => r.loginName },
   { header: 'Session login', width: 28, value: (r) => r.sessionLogin },
   { header: 'Database user', width: 20, value: (r) => r.dbUser },
@@ -73,20 +75,22 @@ export const AUDIT_EXCEL: ExportColumn<AuditEvent>[] = [
 export const SAMPLED_PDF: ExportColumn<SampledActivity>[] = [
   { header: 'When', width: 9, value: (r) => r.firstSeen.slice(0, 19) },
   { header: 'Action', width: 6, value: (r) => r.action },
-  { header: 'Who', width: 18, value: (r) => [who(r.loginName, r.hostName), r.jobName ? `Agent job: ${r.jobName}` : r.programName].filter(Boolean).join('\n') },
-  { header: 'Procedure / statement', width: 37, value: (r) => `${r.procName ?? 'Direct SQL (no procedure)'}\n${clip(oneLine(r.statement), 260)}` },
-  { header: 'Tables (best effort)', width: 15, value: (r) => clip(r.tables ?? '', 160) },
-  { header: 'Database', width: 9, value: (r) => r.db },
+  { header: 'Who', width: 16, value: (r) => [who(r.loginName, r.hostName), r.jobName ? `Agent job: ${r.jobName}` : r.programName].filter(Boolean).join('\n') },
+  { header: 'App', width: 10, value: (r) => r.app },
+  { header: 'Procedure / statement', width: 32, value: (r) => `${r.procName ?? 'Direct SQL (no procedure)'}\n${clip(oneLine(r.statement), 260)}` },
+  { header: 'Tables (best effort)', width: 13, value: (r) => clip(r.tables ?? '', 160) },
+  { header: 'Database', width: 8, value: (r) => r.db },
   { header: 'Ran for', width: 6, value: (r) => durationText(r.elapsedMs), numeric: true },
 ];
 
 export const AUDIT_PDF: ExportColumn<AuditEvent>[] = [
   { header: 'When', width: 9, value: (r) => r.eventTime.slice(0, 19) },
   { header: 'Action', width: 7, value: (r) => (r.succeeded ? r.action : `${r.action}\n(denied)`) },
-  { header: 'Who', width: 20, value: (r) => [r.loginName ?? r.sessionLogin, [r.hostName, r.programName].filter(Boolean).join(' · ')].filter(Boolean).join('\n') },
-  { header: 'Table / procedure', width: 16, value: (r) => [r.schemaName, r.objectName].filter(Boolean).join('.') },
-  { header: 'Statement', width: 39, value: (r) => clip(oneLine(r.statement), 300) },
-  { header: 'Database', width: 9, value: (r) => r.db },
+  { header: 'Who', width: 18, value: (r) => [r.loginName ?? r.sessionLogin, [r.hostName, r.programName].filter(Boolean).join(' · ')].filter(Boolean).join('\n') },
+  { header: 'App', width: 10, value: (r) => r.app },
+  { header: 'Table / procedure', width: 15, value: (r) => [r.schemaName, r.objectName].filter(Boolean).join('.') },
+  { header: 'Statement', width: 33, value: (r) => clip(oneLine(r.statement), 300) },
+  { header: 'Database', width: 8, value: (r) => r.db },
 ];
 
 function durationText(ms: number | null): string {

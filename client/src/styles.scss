@@ -260,6 +260,44 @@ select:focus {
   }
 }
 
+.ctx-note-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.ctx-note-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.ctx-note {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 41;
+  width: min(380px, calc(100vw - 32px));
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 13px;
+  line-height: 1.45;
+  p {
+    margin: 6px 0;
+  }
+  dl {
+    margin: 8px 0;
+  }
+  dt {
+    font-weight: 600;
+    margin-top: 8px;
+  }
+  dd {
+    margin: 2px 0 0;
+  }
+}
+
 .context {
   margin-left: auto;
   display: flex;
@@ -1430,6 +1468,11 @@ a.btn {
   .who-login {
     font-size: 15px;
     font-weight: 600;
+  }
+  .app {
+    max-width: 220px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
   }
   tr.row-bad {
     background: var(--err-bg);

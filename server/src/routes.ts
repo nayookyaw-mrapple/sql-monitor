@@ -9,7 +9,7 @@ import { currentTarget, defaultTarget, knownTargets, targetState, TargetError } 
 import { isoParam, serializeRow } from './serialize.js';
 import { agentGrantScript, getSource, queryErrors, recurringErrors, sourceStatuses } from './errors.js';
 import { deadlocks, liveActivity, lockSummary, procedureStats, procSortKeys, type Scope } from './sqlactivity.js';
-import { domainLogins, historyTotals, queryAudit, querySampled, type HistoryFilter, type WhoType } from './history-store.js';
+import { domainLogins, historyApps, historyTotals, queryAudit, querySampled, type HistoryFilter, type WhoType } from './history-store.js';
 import { samplerStatus } from './sampler.js';
 import { auditSetupScript, auditStatus } from './audit.js';
 
@@ -398,6 +398,7 @@ function historyFilter(req: Request): HistoryFilter {
     whoType: whoType as WhoType | undefined,
     login: str(req.query.login),
     notLogin: str(req.query.notLogin),
+    app: str(req.query.app),
     capture: capture as 'running' | 'last' | undefined,
     page: Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1),
     pageSize: PAGE_SIZES.includes(requestedSize) ? requestedSize : 50,
@@ -431,6 +432,13 @@ api.get('/history/:kind/logins', (req, res) => {
   const kind = String(req.params.kind);
   if (kind !== 'sampled' && kind !== 'audit') throw new HttpError(404, 'Unknown history log');
   res.json({ logins: domainLogins(kind, currentTarget().server, scopeOf(req) === 'server' ? undefined : currentTarget().database) });
+});
+
+/** Applications seen in the log (for the app dropdown), busiest first. */
+api.get('/history/:kind/apps', (req, res) => {
+  const kind = String(req.params.kind);
+  if (kind !== 'sampled' && kind !== 'audit') throw new HttpError(404, 'Unknown history log');
+  res.json({ apps: historyApps(kind, currentTarget().server, scopeOf(req) === 'server' ? undefined : currentTarget().database) });
 });
 
 /** Most rows one export can hold. `total` in the response says how many matched, so the client can tell when it was cut. */

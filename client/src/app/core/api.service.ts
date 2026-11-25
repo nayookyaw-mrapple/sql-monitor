@@ -88,6 +88,11 @@ export class ApiService {
     return this.http.get<{ logins: { login: string; rows: number }[] }>(`/api/history/${kind}/logins`, { params: params({ scope }) });
   }
 
+  /** Applications seen in a history log, busiest first. */
+  historyApps(kind: 'sampled' | 'audit', scope: SqlScope): Observable<{ apps: { app: string; rows: number }[] }> {
+    return this.http.get<{ apps: { app: string; rows: number }[] }>(`/api/history/${kind}/apps`, { params: params({ scope }) });
+  }
+
   /** Every row matching the filter (up to the server's limit), for export. */
   historyExport<T>(kind: 'sampled' | 'audit', query: Omit<HistoryQuery, 'page' | 'pageSize'>): Observable<{ rows: T[]; total: number; limit: number }> {
     return this.http.get<{ rows: T[]; total: number; limit: number }>(`/api/history/${kind}/export`, { params: params(query) });
